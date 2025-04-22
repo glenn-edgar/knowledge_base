@@ -1,0 +1,38 @@
+write a python class which will have an 
+     initialization routine
+     add_level
+     leave_level
+     add_node
+     leave_node
+     verify_end
+
+The initialization routine will set the 
+      self.level to zero
+      self.path  to []
+      self.node_mode = true
+      self.link = ""
+
+The function add_level(link)
+   verify self.node_mode == false
+   rpush link to level_stack
+   self.link = link
+   self.node_mode = trie
+
+The function leave_level
+   verify self.node == true
+   self.node = true
+    rpop path_stack
+   
+The function add_node(node_name,node_properties, node_data)
+  verify self.node = true
+  rpush.level_stack node_name
+  local level_data = string.concate(self.node,".")
+  store in kb_data a new entry
+     self.link, node_name, node_properties, node_data
+  set.node = false
+
+The function leave_node
+  rpop rpush.level_stack 
+ self.node = true
+
+

@@ -1,0 +1,35 @@
+Creating a Python Virtual Environment in Linux
+1. Install Python and venv
+First, make sure Python is installed on your system. Most Linux distributions come with Python pre-installed, but you may need to install the venv module:
+bash# For Debian/Ubuntu
+sudo apt update
+sudo apt install python3 python3-venv
+
+# For Fedora
+sudo dnf install python3 python3-venv
+
+# For Arch Linux
+sudo pacman -S python python-virtualenv
+2. Create a Virtual Environment
+Navigate to your project directory and create a virtual environment:
+bash# Navigate to your project folder
+cd /path/to/your/project
+
+# Create the virtual environment
+python3 -m venv myenv
+Replace "myenv" with whatever name you want to give your virtual environment.
+3. Activate the Virtual Environment
+To start using the virtual environment, you need to activate it:
+bashsource myenv/bin/activate
+After activation, your command prompt will change to show the name of the active environment.
+4. Install Packages in Your Virtual Environment
+Once activated, you can install packages that will be isolated to this environment:
+bashpip install package-name
+5. Deactivate the Virtual Environment
+When you're done working, you can deactivate the environment:
+bashdeactivate
+6. Managing Requirements
+To save your project dependencies for sharing or future installations:
+bashpip freeze > requirements.txt
+To install packages from a requirements file:
+bashpip install -r requirements.txt

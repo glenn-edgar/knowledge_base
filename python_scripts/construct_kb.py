@@ -1,0 +1,339 @@
+import psycopg2
+import json  # Add this import
+from psycopg2 import sql
+from psycopg2.extensions import adapt, AsIs
+
+
+class Construct_KB:
+    # ... [rest of the class initialization code remains unchanged]
+    
+    def add_header_node(self, link, node_name, node_properties, node_data):
+        """
+        Adds a header node to the knowledge base.
+
+        Args:
+            link: The link associated with the header node.
+            node_name: The name of the header node.
+            node_properties: Properties associated with the header node.
+            node_data: Data associated with the header node.
+        """
+        self.path.append(link)
+        self.path.append(node_name)
+        node_path = ".".join(self.path)
+        print(link, node_name, node_properties, node_data, node_path)
+        # Insert into database
+        if self.conn and self.cursor:
+            insert_query = sql.SQL("""
+                INSERT INTO knowledge_base (label, name, properties, data, path)
+                VALUES (%s, %s, %s, %s, %s);
+            """)
+            try:
+                # Convert Python dictionaries to JSON strings
+                json_properties = json.dumps(node_properties) if node_properties else None
+                json_data = json.dumps(node_data) if node_data else None
+                
+                self.cursor.execute(insert_query, (link, node_name, json_properties, json_data, node_path))
+                self.conn.commit()
+            except psycopg2.Error as e:
+                print(f"Error inserting header node: {e}")
+                self.conn.rollback()
+
+    def add_info_node(self, link, node_name, node_properties, node_data):
+        """
+        Adds an info node to the knowledge base. This function adds a node
+        and then immediately removes its link and name from the path.
+        It now checks that the path has a length greater than 1 before adding.
+
+        Args:
+            link: The link associated with the info node.
+            node_name: The name of the info node.
+            node_properties: Properties associated with the info node.
+            node_data: Data associated with the header node.
+        """
+        if len(self.path) <= 1:
+            raise ValueError("Path length must be greater than 1 when adding an info node.")
+        self.path.append(link)
+        self.path.append(node_name)
+        node_path = ".".join(self.path)
+        print(link, node_name, node_properties, node_data, node_path)
+        # Insert into database
+        if self.conn and self.cursor:
+            insert_query = sql.SQL("""
+                    INSERT INTO knowledge_base (label, name, properties, data, path)
+                    VALUES (%s, %s, %s, %s, %s);
+                """)
+            try:
+                # Convert Python dictionaries to JSON strings
+                json_properties = json.dumps(node_properties) if node_properties else None
+                json_data = json.dumps(node_data) if node_data else None
+                
+                self.cursor.execute(insert_query, (link, node_name, json_properties, json_data, node_path))
+                self.conn.commit()
+            except psycopg2.Error as e:
+                print(f"Error inserting info node: {e}")
+                self.conn.rollback()
+
+        self.path.pop()  # Remove node_name
+        self.path.pop()  # Remove link
+        
+        
+        
+import psycopg2
+import json  # Add this import
+from psycopg2 import sql
+from psycopg2.extensions import adapt, AsIs
+
+
+
+class Construct_KB:
+    """
+    This class is designed to construct a knowledge base structure with header
+    and info nodes, using a stack-based approach to manage the path.  It also
+    manages a connection to a PostgreSQL database and sets up the schema.
+    """
+
+    def __init__(self, host, port, dbname, user, password, database):
+        """
+        Initializes the Construct_KB object and connects to the PostgreSQL database.
+        Also sets up the database schema.
+
+        Args:
+            host (str): The database host.
+            port (str): The database port.
+            dbname (str): The name of the database.
+            user (str): The database user.
+            password (str): The password for the database user.
+            database (str):  (Redundant with dbname, but kept for compatibility)
+        """
+        self.path = []  # Stack to keep track of the path (levels/nodes)
+        self.host = host
+        self.port = port
+        self.dbname = dbname
+        self.user = user
+        self.password = password
+        self.conn = None  # Connection object
+        self.cursor = None  # Cursor object
+        self._connect()  # Establish the database connection and schema during initialization
+
+    def _connect(self):
+        """
+        Establishes a connection to the PostgreSQL database and sets up the schema.
+        This is a helper method called by __init__.
+        """
+        try:
+            self.conn = psycopg2.connect(
+                host=self.host,
+                port=self.port,
+                dbname=self.dbname,
+                user=self.user,
+                password=self.password
+            )
+            self.cursor = self.conn.cursor()
+            print(f"Connected to PostgreSQL database {self.dbname} on {self.host}:{self.port}")
+
+            # Execute the SQL script to set up the schema
+            self._setup_schema()
+
+        except psycopg2.Error as e:
+            print(f"Error connecting to PostgreSQL or setting up schema: {e}")
+            if self.conn:
+                self.conn.rollback()  # Rollback any transaction on error
+            raise  # Re-raise the exception
+
+    def _setup_schema(self):
+        """
+        Sets up the database schema (tables, functions, etc.).
+        """
+        try:
+            # Use psycopg2.sql module to construct SQL queries safely.  This prevents SQL injection.
+            #  ltree extension needs to be created.
+            create_extensions_script = sql.SQL("""
+                CREATE EXTENSION IF NOT EXISTS hstore;
+                CREATE EXTENSION IF NOT EXISTS ltree;
+            """)
+            self.cursor.execute(create_extensions_script)
+
+            # Drop the table if it exists
+            drop_table_script = sql.SQL("DROP TABLE IF EXISTS knowledge_base;")
+            self.cursor.execute(drop_table_script)
+
+            # Create the knowledge_base table
+            create_table_script = sql.SQL("""
+                CREATE TABLE knowledge_base (
+                    id SERIAL PRIMARY KEY,
+                    label VARCHAR NOT NULL,
+                    name VARCHAR NOT NULL,
+                    properties JSON,
+                    data JSON,
+                    path LTREE
+                );
+            """)
+            self.cursor.execute(create_table_script)
+            self.conn.commit()  # Commit the changes
+            print("Knowledge base table created.")
+
+        except psycopg2.Error as e:
+            print(f"Error setting up database schema: {e}")
+            if self.conn:
+                self.conn.rollback()  # Rollback the transaction on error
+            raise  # Re-raise the exception
+
+    def _disconnect(self):
+        """
+        Closes the connection to the PostgreSQL database.  This is a helper
+        method called by check_installation.
+        """
+       
+        if self.cursor:
+            self.cursor.close()
+        if self.conn:
+            self.conn.close()
+            print(f"Disconnected from PostgreSQL database {self.dbname} on {self.host}:{self.port}")
+        self.cursor = None
+        self.conn = None
+        
+        
+    def add_header_node(self, link, node_name, node_properties, node_data):
+        """
+        Adds a header node to the knowledge base.
+
+        Args:
+            link: The link associated with the header node.
+            node_name: The name of the header node.
+            node_properties: Properties associated with the header node.
+            node_data: Data associated with the header node.
+        """
+        self.path.append(link)
+        self.path.append(node_name)
+        node_path = ".".join(self.path)
+        print(link, node_name, node_properties, node_data, node_path)
+        # Insert into database
+        if self.conn and self.cursor:
+            insert_query = sql.SQL("""
+                INSERT INTO knowledge_base (label, name, properties, data, path)
+                VALUES (%s, %s, %s, %s, %s);
+            """)
+            try:
+               
+                # Convert Python dictionaries to JSON strings
+                json_properties = json.dumps(node_properties) if node_properties else None
+                json_data = json.dumps(node_data) if node_data else None
+                
+                self.cursor.execute(insert_query, (link, node_name, json_properties, json_data, node_path))
+                self.conn.commit()
+            except psycopg2.Error as e:
+                print(f"Error inserting header node: {e}")
+                self.conn.rollback()
+
+    def add_info_node(self, link, node_name, node_properties, node_data):
+        """
+        Adds an info node to the knowledge base. This function adds a node
+        and then immediately removes its link and name from the path.
+        It now checks that the path has a length greater than 1 before adding.
+
+        Args:
+            link: The link associated with the info node.
+            node_name: The name of the info node.
+            node_properties: Properties associated with the info node.
+            node_data: Data associated with the header node.
+        """
+        if len(self.path) <= 1:
+            raise ValueError("Path length must be greater than 1 when adding an info node.")
+        self.path.append(link)
+        self.path.append(node_name)
+        node_path = ".".join(self.path)
+       
+        # Insert into database
+        if self.conn and self.cursor:
+            insert_query = sql.SQL("""
+                    INSERT INTO knowledge_base (label, name, properties, data, path)
+                    VALUES (%s, %s, %s, %s, %s);
+                """)
+            try:
+                # Convert Python dictionaries to JSON strings
+                json_properties = json.dumps(node_properties) if node_properties else None
+                json_data = json.dumps(node_data) if node_data else None
+                
+                self.cursor.execute(insert_query, (link, node_name, json_properties, json_data, node_path))
+                self.conn.commit()
+            except psycopg2.Error as e:
+                print(f"Error inserting info node: {e}")
+                self.conn.rollback()
+
+        self.path.pop()  # Remove node_name
+        self.path.pop()  # Remove link
+    
+    def leave_header_node(self, label, name):
+        """
+        Leaves a header node, verifying the label and name.
+
+        Args:
+            label: The expected link of the header node.
+            name: The expected name of the header node.
+        """
+        ref_name = self.path.pop()
+        ref_label = self.path.pop()
+        assert ref_name == name, f"Expected name '{name}', but got '{ref_name}'"
+        assert ref_label == label, f"Expected label '{label}', but got '{ref_label}'"
+
+    def check_installation(self):
+        """
+        Checks if the installation is correct by verifying that the path is empty
+        and disconnecting from the PostgreSQL database.
+        If the path is not empty, it raises an error.
+        """
+        self._disconnect()  # Disconnect from the database
+        if len(self.path) != 0:
+            raise RuntimeError(f"Installation check failed: Path is not empty. Path: {self.path}")
+        print("Installation check passed: Path is empty and database disconnected.")
+        return True
+
+    def __del__(self):
+        """
+        Destructor to ensure the database connection is closed when the object
+        is garbage collected.  This is a safety measure.  It's best to
+        explicitly call check_installation(), which now calls _disconnect(),
+        but this destructor provides a backup.
+        """
+        self._disconnect()
+
+if __name__ == '__main__':
+    # Example Usage
+    # Replace with your actual database credentials
+    DB_HOST = "localhost"
+    DB_PORT = "5432"
+    DB_NAME = "knowledge_base"
+    DB_USER = "gedgar"
+    DB_PASSWORD = "ready2go"
+    DATABASE = "knowledge_base"
+
+    kb = Construct_KB(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DATABASE)
+
+    print("Initial state:")
+    print(f"Path: {kb.path}")
+
+    kb.add_header_node("header1_link", "header1_name", {"prop1": "val1"}, "header1_data")
+    print("\nAfter add_header_node:")
+    print(f"Path: {kb.path}")
+
+    kb.add_info_node("info1_link", "info1_name", {"prop2": "val2"}, "info1_data")
+    print("\nAfter add_info_node:")
+    print(f"Path: {kb.path}")
+
+    kb.leave_header_node("header1_link", "header1_name")
+    print("\nAfter leave_header_node:")
+    print(f"Path: {kb.path}")
+
+    kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, "header2_data")
+    kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, "info2_data")
+    kb.leave_header_node("header2_link", "header2_name")
+    print("\nAfter adding and leaving another header node:")
+    print(f"Path: {kb.path}")
+
+    # Example of check_installation
+    try:
+        kb.check_installation()
+    except RuntimeError as e:
+        print(f"Error during installation check: {e}")
+
+   

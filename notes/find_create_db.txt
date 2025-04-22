@@ -1,0 +1,22 @@
+By default, when you install PostgreSQL, it creates several default databases:
+
+postgres - This is the main default database that is created during initialization of the PostgreSQL database cluster. It's intended to be a default database for users and utilities to connect to.
+template0 - This is a pristine template database that should never be changed. It's used when you want to create a new database with none of the local customizations that might have been added to template1.
+template1 - This is the default template for new databases. When you create a new database without specifying a template, PostgreSQL will copy template1.
+
+
+Find existing databases
+Using SQL Query
+You can also use an SQL query to list databases:
+sql   
+SELECT datname FROM pg_database;
+
+To create a database
+
+sql
+CREATE DATABASE database_name;
+
+
+To check database version
+sql
+SELECT version();

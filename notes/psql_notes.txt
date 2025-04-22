@@ -1,0 +1,140 @@
+To connect to a PostgreSQL database using the psql command-line client, you can use the following command syntax:
+bashpsql -h hostname -p port -U username -d database_name
+Here's what each parameter means:
+
+-h hostname: The server hostname or IP address (default: localhost)
+-p port: The port number (default: 5432)
+-U username: The PostgreSQL user to connect as
+-d database_name: The database to connect to
+
+Common Connection Examples
+Basic local connection:
+bashpsql -U postgres
+This connects to a local PostgreSQL server as the postgres user.
+Connect to a specific database:
+bashpsql -U postgres -d mydatabase
+Connect to a remote server:
+bashpsql -h db.example.com -p 5432 -U app_user -d production_db
+Using connection string:
+bashpsql "postgresql://username:password@hostname:port/database"
+Environment Variables
+You can also set environment variables to avoid typing credentials:
+bashexport PGHOST=localhost
+export PGPORT=5432
+export PGUSER=postgres
+export PGDATABASE=mydatabase
+export PGPASSWORD=yourpassword  # Not recommended for security reasons
+
+# Then simply use:
+psql
+
+
+sql to find table names in a database
+
+ SELECT table_schema, table_name, table_type
+FROM information_schema.tables
+WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+ORDER BY table_schema, table_name;
+
+Postgres Table type
+n PostgreSQL, "base table" refers to a regular table that stores data directly. It's a standard, persistent table where you can insert, update, and delete data.
+Let me break down the table types in PostgreSQL:
+
+Base Tables:
+
+Regular tables that physically store data
+Created using the CREATE TABLE statement
+Persist until explicitly dropped
+Can be modified with INSERT, UPDATE, DELETE operations
+The most common type of table
+
+
+Other Table Types:
+
+Views: Virtual tables defined by a query
+Materialized Views: Stored query results that can be refreshed
+Foreign Tables: References to tables in external data sources
+Temporary Tables: Tables that exist only for the current session
+Unlogged Tables: Similar to base tables but not crash-safe
+
+
+
+You can identify base tables in PostgreSQL using this query:
+
+   table_schema,
+    table_name,
+    table_type
+FROM 
+    information_schema.tables
+WHERE 
+    table_type = 'BASE TABLE'
+    AND table_schema NOT IN ('pg_catalog', 'information_schema');
+The "BASE TABLE" value in the table_type column distinguishes regular tables from views, foreign tables, and other table-like objects in PostgreSQL.RetryClaude can make mistakes. Please double-check responses.
+
+To determine table fields
+
+sql
+
+-- Option 1: Using psql meta-command (easiest in psql client)
+\d table_name
+
+-- Option 2: Using psql with more details
+\d+ table_name
+
+-- Option 3: Query the information_schema (works in any PostgreSQL client)
+SELECT 
+    column_name, 
+    data_type, 
+    character_maximum_length,
+    column_default,
+    is_nullable
+FROM 
+    information_schema.columns
+WHERE 
+    table_name = 'your_table_name';
+
+-- Option 4: For more detailed information including constraints
+SELECT
+    c.column_name,
+    c.data_type,
+    c.character_maximum_length,
+    c.is_nullable,
+    c.column_default,
+    pgd.description
+FROM
+    information_schema.columns c
+LEFT JOIN
+    pg_catalog.pg_description pgd ON
+        pgd.objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = c.table_name) AND
+        pgd.objsubid = c.ordinal_position
+WHERE
+    c.table_name = 'your_table_name';
+
+ 
+   
+results for kb_table
+
+
+knowledge_base=# SELECT
+    column_name,
+    data_type,
+    character_maximum_length,
+    column_default,
+    is_nullable
+FROM
+    information_schema.columns
+WHERE
+    table_name = 'kb_table';
+   column_name   |  data_type   | character_maximum_length |            column_default            | is_nullable
+-----------------+--------------+--------------------------+--------------------------------------+-------------
+ id              | integer      |                          | nextval('kb_table_id_seq'::regclass) | NO
+ link_properties | USER-DEFINED |                          |                                      | YES
+ node_properties | USER-DEFINED |                          |                                      | YES
+ node_data       | json         |                          |                                      | YES
+ node_path       | USER-DEFINED |                          |                                      | YES
+ link_class      | text         |                          |                                      | YES
+ link_type       | text         |                          |                                      | YES
+ node_type       | text         |                          |                                      | YES
+ node_class      | text         |                          |                                      | YES
+(9 rows)
+
