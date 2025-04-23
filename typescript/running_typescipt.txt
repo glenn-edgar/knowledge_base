@@ -1,0 +1,78 @@
+To run this TypeScript implementation on a Snapdragon-powered Surface device running Linux, you'll need to set up a Node.js environment and install the necessary dependencies. Here's the most straightforward approach:
+
+First, install Node.js and npm on your Linux partition. You can do this using your distribution's package manager.
+
+For Debian/Ubuntu-based distributions:
+bashsudo apt update
+sudo apt install nodejs npm
+For Arch-based distributions:
+bashsudo pacman -S nodejs npm
+
+Create a new directory for your project and initialize it:
+
+bashmkdir kb-project
+cd kb-project
+npm init -y
+
+Install the required dependencies:
+
+bashnpm install pg typescript ts-node @types/pg
+
+Create a tsconfig.json file for TypeScript configuration:
+
+bashnpx tsc --init
+
+Save the TypeScript code I provided into a file called ConstructKB.ts
+Create a simple script to test your implementation:
+
+typescript// index.ts
+import Construct_KB from './ConstructKB';
+
+async function main() {
+  try {
+    // Replace these with your actual PostgreSQL connection details
+    const kb = new Construct_KB(
+      'localhost',
+      '5432',
+      'mydatabase',
+      'myuser',
+      'mypassword',
+      'mydatabase'
+    );
+    
+    // Test the methods
+    await kb.addHeaderNode('category', 'Books', { type: 'literature' }, { count: 10 });
+    await kb.addInfoNode('book', 'The Great Gatsby', { author: 'F. Scott Fitzgerald' }, { year: 1925 });
+    await kb.leaveHeaderNode('category', 'Books');
+    await kb.checkInstallation();
+    
+    console.log('Test completed successfully!');
+  } catch (error) {
+    console.error('Test failed:', error);
+  }
+}
+
+main();
+
+Make sure PostgreSQL is installed and running on your Snapdragon Surface:
+
+bashsudo apt install postgresql postgresql-contrib
+sudo service postgresql start
+
+Create a database and user:
+
+bashsudo -u postgres psql
+postgres=# CREATE DATABASE mydatabase;
+postgres=# CREATE USER myuser WITH ENCRYPTED PASSWORD 'mypassword';
+postgres=# GRANT ALL PRIVILEGES ON DATABASE mydatabase TO myuser;
+postgres=# \q
+
+Run your TypeScript code:
+
+bashnpx ts-node index.ts
+This approach leverages Node.js and TypeScript on your Linux partition, which is well-supported across different ARM platforms like the Snapdragon processor in Surface devices.
+If you want a more production-ready setup, you could compile the TypeScript to JavaScript and run that directly:
+bashnpx tsc
+node dist/index.js  # Assuming your tsconfig.json outputs to a dist folder
+The most critical aspect is ensuring PostgreSQL is properly installed and configured on your device, as the ARM architecture might have some specific considerations depending on your Linux distribution.
+
