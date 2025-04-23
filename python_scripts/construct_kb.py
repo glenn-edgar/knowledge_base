@@ -276,18 +276,6 @@ class Construct_KB:
         assert ref_name == name, f"Expected name '{name}', but got '{ref_name}'"
         assert ref_label == label, f"Expected label '{label}', but got '{ref_label}'"
 
-    def check_installation(self):
-        """
-        Checks if the installation is correct by verifying that the path is empty
-        and disconnecting from the PostgreSQL database.
-        If the path is not empty, it raises an error.
-        """
-        self._disconnect()  # Disconnect from the database
-        if len(self.path) != 0:
-            raise RuntimeError(f"Installation check failed: Path is not empty. Path: {self.path}")
-        print("Installation check passed: Path is empty and database disconnected.")
-        return True
-
     def __del__(self):
         """
         Destructor to ensure the database connection is closed when the object
@@ -296,6 +284,60 @@ class Construct_KB:
         but this destructor provides a backup.
         """
         self._disconnect()
+        
+    def check_installation(self):
+        """
+        Checks if the installation is correct by verifying that the path is empty.
+        If the path is not empty, the knowledge_base table is deleted if present,
+        the database connection is closed, and an exception is raised.
+        If path is empty, the database connection is closed normally.
+        
+        Returns:
+            bool: True if installation check passed
+            
+        Raises:
+            RuntimeError: If the path is not empty
+        """
+        try:
+            if len(self.path) != 0:
+                # Path is not empty, which is an error condition
+                print(f"Installation check failed: Path is not empty. Path: {self.path}")
+                
+                # Drop the knowledge_base table if it exists
+                if self.conn and self.cursor:
+                    try:
+                        self.cursor.execute("DROP TABLE IF EXISTS knowledge_base;")
+                        self.conn.commit()
+                        print("knowledge_base table has been dropped due to error.")
+                    except Exception as e:
+                        print(f"Error dropping knowledge_base table: {e}")
+                        if self.conn:
+                            self.conn.rollback()
+                
+                # Close the database connection
+                self._disconnect()
+                
+                # Raise exception
+                raise RuntimeError(f"Installation check failed: Path is not empty. Path: {self.path}")
+            
+            # If we reach here, the path is empty, so disconnect normally
+            self._disconnect()
+            print("Installation check passed: Path is empty and database disconnected.")
+            return True
+            
+        except Exception as e:
+            # For any other exception, make sure the table is dropped and connection closed
+            if hasattr(self, 'conn') and self.conn and hasattr(self, 'cursor') and self.cursor:
+                try:
+                    self.cursor.execute("DROP TABLE IF EXISTS knowledge_base;")
+                    self.conn.commit()
+                except Exception as drop_error:
+                    print(f"Error during cleanup: {drop_error}")
+                finally:
+                    self._disconnect()
+            
+            # Re-raise the original exception
+            raise
 
 if __name__ == '__main__':
     # Example Usage
