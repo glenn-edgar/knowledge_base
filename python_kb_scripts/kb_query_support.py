@@ -18,6 +18,18 @@ class KB_Search:
         self.cursor = None
         self.results = None
         
+    def get_conn_and_cursor(self):
+        """
+        Get the database connection and cursor.
+        
+        Returns:
+            tuple: (connection, cursor)
+        """
+        if not self.conn or not self.cursor:
+            print("Not connected to database. Call connect() first.")
+            raise ValueError("Not connected to database. Call connect() first.")
+        return True, self.conn, self.cursor
+        
     def connect(self, dbname, user, password, host="localhost", port="5432"):
         """
         Connect to PostgreSQL database with explicit parameters.

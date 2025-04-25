@@ -30,7 +30,7 @@ class Construct_KB:
         self.dbname = dbname
         self.user = user
         self.password = password
-        self.conn = None  # Connection object
+        self.conn = None  # Connection obje
         self.cursor = None  # Cursor object
         self._connect()  # Establish the database connection and schema during initialization
 
