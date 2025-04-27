@@ -12,11 +12,18 @@ class KB_Search:
         """
         Initialize the KB_Search object.
         """
-        self.base_table = "knowledge_base"
+        self.base_table = "knowledge_base.knowledge_base"
         self.filters = []
         self.conn = None
         self.cursor = None
         self.results = None
+    
+    def set_conn_and_cursor(self, conn, cursor):
+        """
+        Set the database connection and cursor.
+        """
+        self.conn = conn
+        self.cursor = cursor
         
     def get_conn_and_cursor(self):
         """
@@ -26,7 +33,6 @@ class KB_Search:
             tuple: (connection, cursor)
         """
         if not self.conn or not self.cursor:
-            print("Not connected to database. Call connect() first.")
             raise ValueError("Not connected to database. Call connect() first.")
         return True, self.conn, self.cursor
         
@@ -40,40 +46,29 @@ class KB_Search:
             password: Password
             host: Database host (default: localhost)
             port: Database port (default: 5432)
-        
-        Returns:
-            bool: True if connection successful, False otherwise
         """
-        try:
-            self.conn = psycopg2.connect(
-                dbname=dbname,
-                user=user,
-                password=password,
-                host=host,
-                port=port
-            )
-            self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
-            return True
-        except Exception as e:
-            print(f"Connection error: {e}")
-            return False
+        self.conn = psycopg2.connect(
+            dbname=dbname,
+            user=user,
+            password=password,
+            host=host,
+            port=port
+        )
+        self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+        return True
     
     def disconnect(self):
         """
         Disconnect from PostgreSQL database and clean up resources.
         """
-        try:
-            if self.cursor:
-                self.cursor.close()
-            if self.conn:
-                self.conn.close()
-                
-            self.cursor = None
-            self.conn = None
-            return True
-        except Exception as e:
-            print(f"Disconnection error: {e}")
-            return False
+        if self.cursor:
+            self.cursor.close()
+        if self.conn:
+            self.conn.close()
+            
+        self.cursor = None
+        self.conn = None
+        return True
     
     def clear_filters(self):
         """
@@ -158,82 +153,71 @@ class KB_Search:
     def execute_query(self):
         """
         Execute the progressive query with all added filters using CTEs.
-        
-        Returns:
-            bool: True if query executed successfully, False otherwise
         """
         if not self.conn or not self.cursor:
-            print("Not connected to database. Call connect() first.")
-            return False
+            raise ValueError("Not connected to database. Call connect() first.")
             
-        try:
-            # Always select all columns
-            column_str = "*"
-            
-            # If no filters, execute a simple query
-            if not self.filters:
-                query = f"SELECT {column_str} FROM {self.base_table}"
-                self.cursor.execute(query)
-                self.results = self.cursor.fetchall()
-                return True
-            
-            # Start building the CTE query
-            cte_parts = []
-            combined_params = {}
-            
-            # Initial CTE starts with the base table
-            cte_parts.append(f"base_data AS (SELECT {column_str} FROM {self.base_table})")
-            
-            # Process each filter in sequence, building a chain of CTEs
-            for i, filter_info in enumerate(self.filters):
-                condition = filter_info.get('condition', '')
-                params = filter_info.get('params', {})
-                
-                # Update the combined parameters dictionary with prefixed parameter names
-                prefixed_params = {}
-                prefixed_condition = condition
-                
-                for param_name, param_value in params.items():
-                    prefixed_name = f"p{i}_{param_name}"
-                    prefixed_params[prefixed_name] = param_value
-                    # Replace parameter placeholder in the condition
-                    prefixed_condition = prefixed_condition.replace(
-                        f"%({param_name})s", 
-                        f"%({prefixed_name})s"
-                    )
-                
-                combined_params.update(prefixed_params)
-                
-                # Define the CTE name for this step
-                cte_name = f"filter_{i}"
-                prev_cte = f"base_data" if i == 0 else f"filter_{i-1}"
-                
-                # Build this CTE part
-                if condition:
-                    cte_query = f"{cte_name} AS (SELECT {column_str} FROM {prev_cte} WHERE {prefixed_condition})"
-                else:
-                    cte_query = f"{cte_name} AS (SELECT {column_str} FROM {prev_cte})"
-                
-                cte_parts.append(cte_query)
-            
-            # Build the final query with all CTEs
-            with_clause = "WITH " + ",\n".join(cte_parts)
-            final_select = f"SELECT {column_str} FROM filter_{len(self.filters)-1}"
-            
-            # Combine into the complete query
-            final_query = f"{with_clause}\n{final_select}"
-            
-            # Execute the query with the combined parameters
-            self.cursor.execute(final_query, combined_params)
+        # Always select all columns
+        column_str = "*"
+        
+        # If no filters, execute a simple query
+        if not self.filters:
+            query = f"SELECT {column_str} FROM {self.base_table}"
+            self.cursor.execute(query)
             self.results = self.cursor.fetchall()
-            
             return True
+        
+        # Start building the CTE query
+        cte_parts = []
+        combined_params = {}
+        
+        # Initial CTE starts with the base table
+        cte_parts.append(f"base_data AS (SELECT {column_str} FROM {self.base_table})")
+        
+        # Process each filter in sequence, building a chain of CTEs
+        for i, filter_info in enumerate(self.filters):
+            condition = filter_info.get('condition', '')
+            params = filter_info.get('params', {})
             
-        except Exception as e:
-            if self.conn:
-                self.conn.rollback()
-            print(f"Query execution error: {e}")
-            return False
+            # Update the combined parameters dictionary with prefixed parameter names
+            prefixed_params = {}
+            prefixed_condition = condition
+            
+            for param_name, param_value in params.items():
+                prefixed_name = f"p{i}_{param_name}"
+                prefixed_params[prefixed_name] = param_value
+                # Replace parameter placeholder in the condition
+                prefixed_condition = prefixed_condition.replace(
+                    f"%({param_name})s", 
+                    f"%({prefixed_name})s"
+                )
+            
+            combined_params.update(prefixed_params)
+            
+            # Define the CTE name for this step
+            cte_name = f"filter_{i}"
+            prev_cte = f"base_data" if i == 0 else f"filter_{i-1}"
+            
+            # Build this CTE part
+            if condition:
+                cte_query = f"{cte_name} AS (SELECT {column_str} FROM {prev_cte} WHERE {prefixed_condition})"
+            else:
+                cte_query = f"{cte_name} AS (SELECT {column_str} FROM {prev_cte})"
+            
+            cte_parts.append(cte_query)
+        
+        # Build the final query with all CTEs
+        with_clause = "WITH " + ",\n".join(cte_parts)
+        final_select = f"SELECT {column_str} FROM filter_{len(self.filters)-1}"
+        
+        # Combine into the complete query
+        final_query = f"{with_clause}\n{final_select}"
+        
+        # Execute the query with the combined parameters
+        self.cursor.execute(final_query, combined_params)
+        self.results = self.cursor.fetchall()
+        
+        return True
     
     def get_results(self):
         """
@@ -244,7 +228,6 @@ class KB_Search:
             or empty list if no results or query hasn't been executed
         """
         return self.results if self.results else []
-
 
 # Example usage:
 if __name__ == "__main__":
