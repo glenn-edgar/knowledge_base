@@ -33,6 +33,19 @@ class Construct_KB:
         self.conn = None  # Connection obje
         self.cursor = None  # Cursor object
         self._connect()  # Establish the database connection and schema during initialization
+        
+        
+    def get_db_objects(self):
+        """
+        Returns both the database connection and cursor objects.
+
+        Returns:
+            tuple: A tuple containing (connection, cursor)
+                - connection (psycopg2.extensions.connection): The PostgreSQL database connection
+                - cursor (psycopg2.extensions.cursor): The PostgreSQL database cursor
+        """
+        return self.conn, self.cursor
+
 
     def _connect(self):
         """
@@ -60,7 +73,7 @@ class Construct_KB:
         # Use psycopg2.sql module to construct SQL queries safely. This prevents SQL injection.
         # ltree extension needs to be created.
         create_extensions_script = sql.SQL("""
-            CREATE EXTENSION IF NOT EXISTS hstore;
+  
             CREATE EXTENSION IF NOT EXISTS ltree;
         """)
         self.cursor.execute(create_extensions_script)
@@ -213,8 +226,7 @@ class Construct_KB:
             # Raise exception
             raise RuntimeError(f"Installation check failed: Path is not empty. Path: {self.path}")
         
-        # If we reach here, the path is empty, so disconnect normally
-        self._disconnect()
+      
         print("Installation check passed: Path is empty and database disconnected.")
         return True
 
@@ -254,6 +266,7 @@ if __name__ == '__main__':
     # Example of check_installation
     try:
         kb.check_installation()
+        kb._disconnect()
     except RuntimeError as e:
         print(f"Error during installation check: {e}")
 
