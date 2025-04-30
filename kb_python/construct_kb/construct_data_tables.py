@@ -4,8 +4,10 @@ from psycopg2 import sql
 from psycopg2.extensions import adapt, AsIs
 from construct_kb import Construct_KB
 from construct_status_table import Construct_Status_Table
+from construct_job_table import Construct_Job_Table
+from construct_stream_table import Construct_Stream_Table
 
-class Construct_Data_Tables(Construct_KB,Construct_Status_Table):
+class Construct_Data_Tables(Construct_KB,Construct_Status_Table,Construct_Job_Table,Construct_Stream_Table):
     """
     This class is designed to construct data tables with header
     and info nodes, using a stack-based approach to manage the path. It also
@@ -29,9 +31,11 @@ class Construct_Data_Tables(Construct_KB,Construct_Status_Table):
         Construct_KB.__init__(self, host, port, dbname, user, password, database)
         conn, cursor = Construct_KB.get_db_objects(self)
         Construct_Status_Table.__init__(self, conn, cursor,Construct_KB)
+        Construct_Job_Table.__init__(self, conn, cursor,Construct_KB)
+        Construct_Stream_Table.__init__(self, conn, cursor,Construct_KB)
         
     def check_installation(self):
         Construct_KB.check_installation(self)
         Construct_Status_Table.check_installation(self)
-        
-   
+        Construct_Job_Table.check_installation(self)
+        Construct_Stream_Table.check_installation(self)

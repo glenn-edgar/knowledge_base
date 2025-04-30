@@ -1,7 +1,7 @@
 import psycopg2
 import json
 from psycopg2 import sql
-from psycopg2.extensions import adapt, AsIs
+from psycopg2.extensions import adapt
 
 class Construct_Status_Table:
     """
