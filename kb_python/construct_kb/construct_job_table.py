@@ -4,9 +4,9 @@ from psycopg2 import sql
 from psycopg2.extensions import adapt  
 
 
-class Construct_job_Table:
+class Construct_Job_Table:
     """
-    This class is designed to construct a status table with header
+    This class is designed to construct a stream table with header
     and info nodes, using a stack-based approach to manage the path. It also
     manages a connection to a PostgreSQL database and sets up the schema.
     """
@@ -45,19 +45,19 @@ class Construct_job_Table:
         """)
         self.cursor.execute(create_table_script)
         self.conn.commit()  # Commit the changes
-        print("Status table created.")
+        print("stream table created.")
 
-    def add_job_field(self, job_key, job_length):
+    def add_job_field(self, job_key, job_length,description):
         """
-        Add a new status field to the knowledge base
+        Add a new stream field to the knowledge base
         
         Args:
-            job_key (str): The key/name of the status field
+            job_key (str): The key/name of the stream field
             job_length (int): The length of the job
-          
+            description (str): The description of the job queue
             
         Raises:
-            TypeError: If status_key is not a string or properties is not a dictionary
+            TypeError: If stream_key is not a string or properties is not a dictionary
         """
         if not isinstance(job_key, str):
             raise TypeError("job_key must be a string")
@@ -67,7 +67,7 @@ class Construct_job_Table:
         properties = {'job_length': job_length}
         properties_json = json.dumps(properties)
        
-        data_json = ""
+        data_json = json.dumps(description)
         
         # Add the node to the knowledge base
         self.construct_kb.add_info_node("KB_JOB_QUEUE", job_key, properties_json, data_json)
@@ -75,8 +75,8 @@ class Construct_job_Table:
         print(f"Added job field '{job_key}' with properties: {properties_json} and data: {data_json}")
         
         return {
-            "status": "success",
-            "message": f"Status field '{job_key}' added successfully",
+            "stream": "success",
+            "message": f"stream field '{job_key}' added successfully",
             "properties": properties,
             "data":data_json
         }
@@ -158,10 +158,10 @@ class Construct_job_Table:
         """
         Synchronize the knowledge_base and job_table based on paths.
         - Remove entries from job_table that don't exist in knowledge_base with label "KB_JOB_QUEUE"
-        - Add entries to status_table for paths in knowledge_base that don't exist in status_table
+        - Add entries to stream_table for paths in knowledge_base that don't exist in stream_table
         """
         
-        # Get all paths from status_table
+        # Get all paths from stream_table
         self.cursor.execute("""
             SELECT DISTINCT path::text FROM job_table.job_table;
         unique_job_paths = [row[0] for row in self.cursor.fetchall()]

@@ -5,7 +5,7 @@ from psycopg2.extensions import adapt
 
 class Construct_Stream_Table:
     """
-    This class is designed to construct a status table with header
+    This class is designed to construct a stream table with header
     and info nodes, using a stack-based approach to manage the path. It also
     manages a connection to a PostgreSQL database and sets up the schema.
     """
@@ -39,19 +39,19 @@ class Construct_Stream_Table:
         """)
         self.cursor.execute(create_table_script)
         self.conn.commit()  # Commit the changes
-        print("Status table created.")
+        print("stream table created.")
 
-    def add_stream_field(self, stream_key, stream_length, initial_data):
+    def add_stream_field(self, stream_key, stream_length, description):
         """
-        Add a new status field to the knowledge base
+        Add a new stream field to the knowledge base
         
         Args:
-            stream_key (str): The key/name of the status field
+            stream_key (str): The key/name of the stream field
             stream_length (int): The length of the stream
           
             
         Raises:
-            TypeError: If status_key is not a string or properties is not a dictionary
+            TypeError: If stream_key is not a string or properties is not a dictionary
         """
         if not isinstance(stream_key, str):
             raise TypeError("stream_key must be a string")
@@ -61,7 +61,7 @@ class Construct_Stream_Table:
         properties = {'stream_length': stream_length}
         properties_json = json.dumps(properties)
        
-        data_json = json.dumps(initial_data)
+        data_json = json.dumps(description)
         
         # Add the node to the knowledge base
         self.construct_kb.add_info_node("KB_STREAM_FIELD", stream_key, properties_json, data_json)
@@ -69,10 +69,10 @@ class Construct_Stream_Table:
         print(f"Added stream field '{stream_key}' with properties: {properties_json} and data: {data_json}")
         
         return {
-            "status": "success",
-            "message": f"Status field '{stream_key}' added successfully",
+            "stream": "success",
+            "message": f"stream field '{stream_key}' added successfully",
             "properties": properties,
-            "data": initial_data
+            "data": description
         }
         
         
@@ -153,20 +153,20 @@ class Construct_Stream_Table:
         
     def check_installation(self):     
         """
-        Synchronize the knowledge_base and status_table based on paths.
-        - Remove entries from status_table that don't exist in knowledge_base with label "KB_STATUS_FIELD"
-        - Add entries to status_table for paths in knowledge_base that don't exist in status_table
+        Synchronize the knowledge_base and stream_table based on paths.
+        - Remove entries from stream_table that don't exist in knowledge_base with label "KB_stream_FIELD"
+        - Add entries to stream_table for paths in knowledge_base that don't exist in stream_table
         """
         
-        # Get all paths from status_table
+        # Get all paths from stream_table
         self.cursor.execute("""
             SELECT DISTINCT path::text FROM stream_table.stream_table;
         unique_stream_paths = [row[0] for row in self.cursor.fetchall()]
         
-        # Get specified paths (paths with label "KB_STATUS_FIELD") from knowledge_table
+        # Get specified paths (paths with label "KB_stream_FIELD") from knowledge_table
         self.cursor.execute("""
             SELECT path, label, name,properties FROM knowledge_base.knowledge_base 
-            WHERE label = 'KB_STATUS_FIELD';
+            WHERE label = 'KB_stream_FIELD';
         """)
         specified_stream_data = self.cursor.fetchall()
         specified_stream_paths = [row[0] for row in specified_stream_data]
@@ -180,14 +180,14 @@ class Construct_Stream_Table:
     def diag_function(self):
         """
         Diagnostic function that displays label, name, and node ID for all values
-        in both knowledge_base and status_table where label = 'KB_STATUS_FIELD'
+        in both knowledge_base and stream_table where label = 'KB_stream_FIELD'
         
         Returns:
             dict: Dictionary containing diagnostic information from both tables
         """
         results = {
             "knowledge_table": [],
-            "status_table": []
+            "stream_table": []
         }
         
         # Query knowledge_base table
@@ -223,5 +223,5 @@ class Construct_Stream_Table:
                     "length": length
                 })
         else:
-            print("No entries with label 'KB_STATUS_FIELD' found")
+            print("No entries with label 'KB_stream_FIELD' found")
    
