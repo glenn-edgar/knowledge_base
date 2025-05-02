@@ -30,7 +30,7 @@ class Construct_RPC_Server_Table:
         # Create the knowledge_base table
         create_table_script = sql.SQL("""
             CREATE SCHEMA IF NOT EXISTS rpc_server_table;
-            CREATE TABLE rpc_server_table.rpc_server_table(
+            CREATE TABLE IF NOT EXISTS rpc_server_table.rpc_server_table(
                 path LTREE,
                 posted_at TIMESTAMP DEFAULT NOW(),
                 started_at TIMESTAMP DEFAULT NOW(),
@@ -41,7 +41,7 @@ class Construct_RPC_Server_Table:
         """)
         self.cursor.execute(create_table_script)
         self.conn.commit()  # Commit the changes
-        print("Status table created.")
+        print("rpc_server table created.")
 
     def add_rpc_server_field(self, rpc_server_key, rpc_server_length,info_data  ):
         """
@@ -107,7 +107,7 @@ class Construct_RPC_Server_Table:
         # Commit after all chunks are processed
         self.conn.commit()
         
-    def _manage_server_table(self, specified_rpc_server_paths, specified_rpc_server_length):
+    def _manage_rpc_server_table(self, specified_rpc_server_paths, specified_rpc_server_length):
         """
         Manages the number of records in server_table.job_table to match specified server lengths for each path.
         Removes older records first if necessary and adds new ones with None for JSON data.
@@ -163,7 +163,8 @@ class Construct_RPC_Server_Table:
         # Get all paths from status_table
         self.cursor.execute("""
             SELECT DISTINCT path::text FROM rpc_server_table.rpc_server_table;
-        unique_server_paths = [row[0] for row in self.cursor.fetchall()]
+        """)
+        unique_rpc_server_paths = [row[0] for row in self.cursor.fetchall()]
         
         # Get specified paths (paths with label "KB_RPC_SERVER_FIELD") from knowledge_table
         self.cursor.execute("""
@@ -172,13 +173,38 @@ class Construct_RPC_Server_Table:
         """)
         specified_rpc_server_data = self.cursor.fetchall()
         specified_rpc_server_paths = [row[0] for row in specified_rpc_server_data]
-        specified_rpc_server_length = [row[3]['rpc_server_length'] for row in specified_rpc_server_data]
-        invalid_rpc_server_paths = [path for path in unique_rpc_server_paths if path not in specified_rpc_server_paths]
-        missing_rpc_server_paths = [path for path in specified_rpc_server_paths if path not in unique_rpc_server_paths]
- 
+       
+   
+     # Extract rpc_server_length values from specified data
+        specified_rpc_server_length = []
+        for row in specified_rpc_server_data:
+            properties_json = row[3]
+            properties = json.loads(properties_json)
+            length = properties['rpc_server_length']
+            specified_rpc_server_length.append(length)
+
+        # Create a list for invalid rpc server lengths
+        invalid_server_paths = []
+        for row in specified_rpc_server_data:
+            properties_json = row[3]
+            properties = json.loads(properties_json)
+            length = properties['rpc_server_length']
+            invalid_rpc_server_specified_rpc_server_length.append(length)
+
+        # Find paths that are in unique_rpc_server_paths but not in specified_rpc_server_paths
+        paths = []
+        for path in unique_rpc_server_paths:
+            if path not in specified_rpc_server_paths:
+                paths.append(path)
+
+        # Find paths that are in specified_rpc_server_paths but not in unique_rpc_server_paths
+        missing_rpc_server_paths = []
+        for path in specified_rpc_server_paths:
+            if path not in unique_rpc_server_paths:
+                missing_rpc_server_paths.append(path)
         self._remove_invalid_rpc_server_fields(invalid_rpc_server_paths)
-        self._manage_rpc_server_table(self, specified_rpc_server_paths,specified_rpc_server_length)
-    
-    
+        self._manage_rpc_server_table(specified_rpc_server_paths,specified_rpc_server_length)
             
- 
+            
+            
+  

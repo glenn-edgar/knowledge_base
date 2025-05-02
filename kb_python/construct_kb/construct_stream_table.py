@@ -30,7 +30,7 @@ class Construct_Stream_Table:
         # Create the knowledge_base table
         create_table_script = sql.SQL("""
             CREATE SCHEMA IF NOT EXISTS stream_table;
-            CREATE TABLE stream_table.stream_table(
+            CREATE TABLE IF NOT EXISTS stream_table.stream_table(
                 path LTREE,
                 recorded_at TIMESTAMP DEFAULT NOW(),
                 data JSON,
@@ -70,7 +70,7 @@ class Construct_Stream_Table:
         
         return {
             "stream": "success",
-            "message": f"stream field '{stream_key}' added successfully",
+            "message": "stream field '{stream_key}' added successfully",
             "properties": properties,
             "data": description
         }
@@ -97,7 +97,7 @@ class Construct_Stream_Table:
             placeholders = ','.join(['%s'] * len(chunk))
             
             # Delete entries with paths in current chunk
-            self.cursor.execute(f"""
+            self.cursor.execute("""
                 DELETE FROM stream_table.job_table
                 WHERE path IN ({placeholders});
             """, chunk)
@@ -160,14 +160,15 @@ class Construct_Stream_Table:
         
         # Get all paths from stream_table
         self.cursor.execute("""
-            SELECT DISTINCT path::text FROM stream_table.stream_table;
+            SELECT DISTINCT path::text FROM stream_table.stream_table; 
+        """)
         unique_stream_paths = [row[0] for row in self.cursor.fetchall()]
         
         # Get specified paths (paths with label "KB_stream_FIELD") from knowledge_table
         self.cursor.execute("""
             SELECT path, label, name,properties FROM knowledge_base.knowledge_base 
             WHERE label = 'KB_stream_FIELD';
-        """)
+        """ )
         specified_stream_data = self.cursor.fetchall()
         specified_stream_paths = [row[0] for row in specified_stream_data]
         specified_stream_length = [row[3]['stream_length'] for row in specified_stream_data]
@@ -175,53 +176,6 @@ class Construct_Stream_Table:
         missing_stream_paths = [path for path in specified_stream_paths if path not in unique_stream_paths]
  
         self._remove_invalid_stream_fields(invalid_stream_paths)
-        self._manage_stream_table(self, specified_stream_paths,specified_stream_length)
+        self._manage_stream_table(specified_stream_paths,specified_stream_length)
     
-    def diag_function(self):
-        """
-        Diagnostic function that displays label, name, and node ID for all values
-        in both knowledge_base and stream_table where label = 'KB_stream_FIELD'
-        
-        Returns:
-            dict: Dictionary containing diagnostic information from both tables
-        """
-        results = {
-            "knowledge_table": [],
-            "stream_table": []
-        }
-        
-        # Query knowledge_base table
-        self.cursor.execute("""
-            SELECT id, label, name, path::text,properties:text
-            FROM knowledge_base.knowledge_base 
-            WHERE label = '"KB_STREAM_FIELD"'
-            ORDER BY path;
-        """)
-        kb_rows = self.cursor.fetchall()
-        
-        
-        
-      
-        # Process knowledge_base results
-        print("=== KNOWLEDGE BASE TABLE ENTRIES ===")
-        if kb_rows:
-            # Print header
-            print(f"{'ID':<6} {'LABEL':<20} {'NAME':<30} {'PATH':<40} {'PROPERTIES'}")
-            print("-" * 80)
-            
-            # Print data rows
-            for row in kb_rows:
-                node_id, label, name, path, properties = row
-                properties = json.loads(properties)
-                length = properties['stream_length']
-                print(f"{node_id:<6} {label:<20} {name:<30} {path:<40} {length}")
-                results["knowledge_table"].append({
-                    "id": node_id,
-                    "label": label,
-                    "name": name,
-                    "path": path,
-                    "length": length
-                })
-        else:
-            print("No entries with label 'KB_stream_FIELD' found")
-   
+    

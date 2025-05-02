@@ -30,7 +30,7 @@ class Construct_Status_Table:
         # Create the knowledge_base table
         create_table_script = sql.SQL("""
             CREATE SCHEMA IF NOT EXISTS status_table;
-            CREATE TABLE status_table.status_table(
+            CREATE TABLE IF NOT EXISTS status_table.status_table(
                 id SERIAL PRIMARY KEY,
                 label VARCHAR NOT NULL,
                 name VARCHAR NOT NULL,

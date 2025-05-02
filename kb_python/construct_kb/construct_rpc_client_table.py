@@ -30,7 +30,7 @@ class Construct_RPC_Client_Table:
         # Create the knowledge_base table
         create_table_script = sql.SQL("""
             CREATE SCHEMA IF NOT EXISTS rpc_client_table;
-            CREATE TABLE rpc_client_table.rpc_client_table(
+            CREATE TABLE IF NOT EXISTS rpc_client_table.rpc_client_table(
                 id SERIAL PRIMARY KEY,
                 waiting_for_response BOOLEAN DEFAULT FALSE,
                 queue_at TIMESTAMP DEFAULT NOW(),

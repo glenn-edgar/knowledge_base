@@ -31,21 +31,21 @@ class Construct_Job_Table:
         # Create the knowledge_base table
         create_table_script = sql.SQL("""
             CREATE SCHEMA IF NOT EXISTS job_table;
-            CREATE TABLE job_table.job_table(
+            CREATE TABLE  IF NOT EXISTS job_table.job_table(
                 id SERIAL PRIMARY KEY,
-                path LTREE 
+                path LTREE ,
                 schedule_at TIMESTAMP DEFAULT NOW(),
                 started_at TIMESTAMP DEFAULT NOW(),
                 completed_at TIMESTAMP DEFAULT NOW(),
                 is_active BOOLEAN DEFAULT FALSE,
                 valid BOOLEAN DEFAULT FALSE,
-                data JSON,
+                data JSON
                 
             );
         """)
         self.cursor.execute(create_table_script)
         self.conn.commit()  # Commit the changes
-        print("stream table created.")
+        print("job table created.")
 
     def add_job_field(self, job_key, job_length,description):
         """
@@ -164,6 +164,7 @@ class Construct_Job_Table:
         # Get all paths from stream_table
         self.cursor.execute("""
             SELECT DISTINCT path::text FROM job_table.job_table;
+        """)
         unique_job_paths = [row[0] for row in self.cursor.fetchall()]
         
         # Get specified paths (paths with label "KB_JOB_QUEUE") from knowledge_table
@@ -178,6 +179,6 @@ class Construct_Job_Table:
         missing_job_paths = [path for path in specified_job_paths if path not in unique_job_paths]
  
         self._remove_invalid_job_fields(invalid_job_paths)
-        self._manage_job_table(self, specified_job_paths,specified_job_length)
+        self._manage_job_table( specified_job_paths,specified_job_length)
         
         

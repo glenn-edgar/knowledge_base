@@ -9,7 +9,21 @@ from construct_stream_table import Construct_Stream_Table
 from construct_rpc_client_table import Construct_RPC_Client_Table
 from construct_rpc_server_table import Construct_RPC_Server_Table
 
-class Construct_Data_Tables(Construct_KB,Construct_Status_Table,Construct_Job_Table,Construct_Stream_Table):
+from construct_kb import Construct_KB
+from construct_status_table import Construct_Status_Table
+from construct_job_table import Construct_Job_Table
+from construct_stream_table import Construct_Stream_Table
+from construct_rpc_client_table import Construct_RPC_Client_Table
+from construct_rpc_server_table import Construct_RPC_Server_Table
+
+from construct_kb import Construct_KB
+from construct_status_table import Construct_Status_Table
+from construct_job_table import Construct_Job_Table
+from construct_stream_table import Construct_Stream_Table
+from construct_rpc_client_table import Construct_RPC_Client_Table
+from construct_rpc_server_table import Construct_RPC_Server_Table
+
+class Construct_Data_Tables:
     """
     This class is designed to construct data tables with header
     and info nodes, using a stack-based approach to manage the path. It also
@@ -17,9 +31,9 @@ class Construct_Data_Tables(Construct_KB,Construct_Status_Table,Construct_Job_Ta
     """
     def __init__(self, host, port, dbname, user, password, database):
         """
-        Initializes the Construct_KB object and connects to the PostgreSQL database.
-        Also sets up the database schema.
-
+        Initializes the Construct_Data_Tables object by creating instances of all required
+        table constructor classes and connecting to the PostgreSQL database.
+        
         Args:
             host (str): The database host.
             port (str): The database port.
@@ -28,23 +42,41 @@ class Construct_Data_Tables(Construct_KB,Construct_Status_Table,Construct_Job_Ta
             password (str): The password for the database user.
             database (str): (Redundant with dbname, but kept for compatibility)
         """
+        # Create KB as an attribute instead of inheriting from it
+        self.kb = Construct_KB(host, port, dbname, user, password, database)
         
-  
-        Construct_KB.__init__(self, host, port, dbname, user, password, database)
-        conn, cursor = Construct_KB.get_db_objects(self)
-        Construct_Status_Table.__init__(self, conn, cursor,Construct_KB)
-        Construct_Job_Table.__init__(self, conn, cursor,Construct_KB)
-        Construct_Stream_Table.__init__(self, conn, cursor,Construct_KB)
-        Construct_RPC_Client_Table.__init__(self, conn, cursor,Construct_KB)    
-        Construct_RPC_Server_Table.__init__(self, conn, cursor,Construct_KB)
+        # Get database connection objects
+        conn, cursor = self.kb.get_db_objects()
+        
+        
+        # Create instances of all table constructors as attributes
+        self.status_table = Construct_Status_Table(conn, cursor, construct_kb=self.kb)
+        self.job_table = Construct_Job_Table(conn, cursor, self.kb)
+        self.stream_table = Construct_Stream_Table(conn, cursor, self.kb)
+        self.rpc_client_table = Construct_RPC_Client_Table(conn, cursor, self.kb)
+        self.rpc_server_table = Construct_RPC_Server_Table(conn, cursor, self.kb)
+        self.path = self.kb.path
+        self.add_header_node = self.kb.add_header_node
+        self.add_info_node = self.kb.add_info_node
+        self.leave_header_node = self.kb.leave_header_node
+        self.disconnect = self.kb._disconnect
+        self.add_stream_field = self.stream_table.add_stream_field
+        self.add_rpc_client_field = self.rpc_client_table.add_rpc_client_field
+        self.add_rpc_server_field = self.rpc_server_table.add_rpc_server_field
+        self.add_status_field = self.status_table.add_status_field
+        self.add_job_field = self.job_table.add_job_field
         
     def check_installation(self):
-        Construct_KB.check_installation(self)
-        Construct_Status_Table.check_installation(self)
-        Construct_Job_Table.check_installation(self)
-        Construct_Stream_Table.check_installation(self)
-        Construct_RPC_Client_Table.check_installation(self)
-        Construct_RPC_Server_Table.check_installation(self)
+        """
+        Checks the installation status of all table components
+        """
+        # Call check_installation on each component instance
+        self.kb.check_installation()
+        self.status_table.check_installation()
+        self.job_table.check_installation()
+        self.stream_table.check_installation()
+        self.rpc_client_table.check_installation()
+        self.rpc_server_table.check_installation()
         
 if __name__ == '__main__':
     # Example Usage
@@ -69,6 +101,10 @@ if __name__ == '__main__':
     print("\nAfter add_info_node:")
     print(f"Path: {kb.path}")
 
+    kb.add_rpc_server_field("info1_server",25,"info1_server_data")
+    kb.add_status_field("info1_status",  "info1_status_description",{"prop3": "val3"})
+    kb.add_stream_field("info1_status",100, "info1_stream")
+        
     kb.leave_header_node("header1_link", "header1_name")
     print("\nAfter leave_header_node:")
     print(f"Path: {kb.path}")
@@ -82,7 +118,7 @@ if __name__ == '__main__':
     # Example of check_installation
     try:
         kb.check_installation()
-        kb._disconnect()
+        kb.disconnect()
     except RuntimeError as e:
         print(f"Error during installation check: {e}")
 
