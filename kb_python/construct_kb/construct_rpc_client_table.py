@@ -101,7 +101,7 @@ class Construct_RPC_Client_Table:
         # Find not_specified_paths: paths in all_paths that are not in specified_paths
         not_specified_paths = [path for path in all_paths if path not in specified_paths]
         
-        # Process not_specified_paths: remove entries from rpc_client_table
+        # Process not_specified_0paths: remove entries from rpc_client_table
         for path in not_specified_paths:
             self.cursor.execute("""
                 DELETE FROM rpc_client_table.rpc_client_table
@@ -116,9 +116,9 @@ class Construct_RPC_Client_Table:
                     # Insert with empty JSON objects for properties and data
                     self.cursor.execute("""
                         INSERT INTO rpc_client_table.rpc_client_table 
-                        (label, name, properties, data, path)
-                        VALUES (%s, %s, %s, %s, %s);
-                    """, (label, name, '{}', '{}', path))
+                        (waiting_for_response, queue_at ,processed_at,data,path)
+                        VALUES (False, NOW(), NOW(), '{}',  %s);
+                    """, (path, ))
                     break
         
         # Commit the changes
@@ -130,5 +130,4 @@ class Construct_RPC_Client_Table:
         }
         
    
-    
-    
+ 

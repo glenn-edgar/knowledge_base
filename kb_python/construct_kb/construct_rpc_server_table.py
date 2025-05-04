@@ -183,28 +183,7 @@ class Construct_RPC_Server_Table:
             length = properties['rpc_server_length']
             specified_rpc_server_length.append(length)
 
-        # Create a list for invalid rpc server lengths
-        invalid_server_paths = []
-        for row in specified_rpc_server_data:
-            properties_json = row[3]
-            properties = json.loads(properties_json)
-            length = properties['rpc_server_length']
-            invalid_rpc_server_specified_rpc_server_length.append(length)
-
-        # Find paths that are in unique_rpc_server_paths but not in specified_rpc_server_paths
-        paths = []
-        for path in unique_rpc_server_paths:
-            if path not in specified_rpc_server_paths:
-                paths.append(path)
-
-        # Find paths that are in specified_rpc_server_paths but not in unique_rpc_server_paths
-        missing_rpc_server_paths = []
-        for path in specified_rpc_server_paths:
-            if path not in unique_rpc_server_paths:
-                missing_rpc_server_paths.append(path)
+        invalid_rpc_server_paths = [path for path in unique_rpc_server_paths if path not in specified_rpc_server_paths]
+        missing_rpc_server_paths = [path for path in specified_rpc_server_paths if path not in unique_rpc_server_paths]
         self._remove_invalid_rpc_server_fields(invalid_rpc_server_paths)
         self._manage_rpc_server_table(specified_rpc_server_paths,specified_rpc_server_length)
-            
-            
-            
-  

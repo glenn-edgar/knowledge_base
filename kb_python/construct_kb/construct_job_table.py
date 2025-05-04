@@ -154,6 +154,7 @@ class Construct_Job_Table:
         
         # Commit after all chunks are processed
         self.conn.commit()
+        
     def check_installation(self):     
         """
         Synchronize the knowledge_base and job_table based on paths.
@@ -181,4 +182,5 @@ class Construct_Job_Table:
         self._remove_invalid_job_fields(invalid_job_paths)
         self._manage_job_table( specified_job_paths,specified_job_length)
         
-        
+     
+ 

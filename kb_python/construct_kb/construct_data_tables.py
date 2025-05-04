@@ -104,7 +104,7 @@ if __name__ == '__main__':
     kb.add_rpc_server_field("info1_server",25,"info1_server_data")
     kb.add_status_field("info1_status",  "info1_status_description",{"prop3": "val3"})
     kb.add_stream_field("info1_status",100, "info1_stream")
-        
+    kb.add_rpc_client_field("info1_client", "info1_client_description")   
     kb.leave_header_node("header1_link", "header1_name")
     print("\nAfter leave_header_node:")
     print(f"Path: {kb.path}")
