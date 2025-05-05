@@ -8,22 +8,64 @@ class KB_Search:
     Always selects all columns from the knowledge_base table.
     """
     
-    def __init__(self):
+
+        
+    def __init__(self, host, port, dbname, user, password):
         """
-        Initialize the KB_Search object.
+        Initializes the Construct_KB object and connects to the PostgreSQL database.
+        Also sets up the database schema.
+
+        Args:
+            host (str): The database host.
+            port (str): The database port.
+            dbname (str): The name of the database.
+            user (str): The database user.
+            password (str): The password for the database user.
+           
         """
+        self.path = []  # Stack to keep track of the path (levels/nodes)
+        self.host = host
+        self.port = port
+        self.dbname = dbname
+        self.user = user
+        self.password = password
         self.base_table = "knowledge_base.knowledge_base"
         self.filters = []
-        self.conn = None
-        self.cursor = None
+
         self.results = None
-    
-    def set_conn_and_cursor(self, conn, cursor):
+
+        self._connect()  # Establish the database connection and schema during initialization
+        
+ 
+    def _connect(self):
         """
-        Set the database connection and cursor.
+        Establishes a connection to the PostgreSQL database and sets up the schema.
+        This is a helper method called by __init__.
         """
-        self.conn = conn
-        self.cursor = cursor
+        self.path_values = {}
+        self.conn = psycopg2.connect(
+            host=self.host,
+            port=self.port,
+            dbname=self.dbname,
+            user=self.user,
+            password=self.password
+        )
+        self.cursor = self.conn.cursor()
+        print(f"Connected to PostgreSQL database {self.dbname} on {self.host}:{self.port}")
+        
+    def disconnect(self):
+        """
+        Closes the connection to the PostgreSQL database. This is a helper
+        method called by check_installation.
+        """
+      
+        if self.cursor:
+            self.cursor.close()
+        if self.conn:
+            self.conn.close()
+            print(f"Disconnected from PostgreSQL database {self.dbname} on {self.host}:{self.port}")
+        self.cursor = None
+        self.conn = None    
         
     def get_conn_and_cursor(self):
         """
@@ -36,39 +78,9 @@ class KB_Search:
             raise ValueError("Not connected to database. Call connect() first.")
         return True, self.conn, self.cursor
         
-    def connect(self, dbname, user, password, host="localhost", port="5432"):
-        """
-        Connect to PostgreSQL database with explicit parameters.
-        
-        Args:
-            dbname: Database name
-            user: Username
-            password: Password
-            host: Database host (default: localhost)
-            port: Database port (default: 5432)
-        """
-        self.conn = psycopg2.connect(
-            dbname=dbname,
-            user=user,
-            password=password,
-            host=host,
-            port=port
-        )
-        self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
-        return True
+
     
-    def disconnect(self):
-        """
-        Disconnect from PostgreSQL database and clean up resources.
-        """
-        if self.cursor:
-            self.cursor.close()
-        if self.conn:
-            self.conn.close()
-            
-        self.cursor = None
-        self.conn = None
-        return True
+   
     
     def clear_filters(self):
         """
