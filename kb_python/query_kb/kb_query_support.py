@@ -50,6 +50,7 @@ class KB_Search:
             user=self.user,
             password=self.password
         )
+    
         self.cursor = self.conn.cursor()
         print(f"Connected to PostgreSQL database {self.dbname} on {self.host}:{self.port}")
         
@@ -58,7 +59,7 @@ class KB_Search:
         Closes the connection to the PostgreSQL database. This is a helper
         method called by check_installation.
         """
-      
+       
         if self.cursor:
             self.cursor.close()
         if self.conn:
@@ -166,6 +167,7 @@ class KB_Search:
         """
         Execute the progressive query with all added filters using CTEs.
         """
+        
         if not self.conn or not self.cursor:
             raise ValueError("Not connected to database. Call connect() first.")
             
@@ -174,10 +176,12 @@ class KB_Search:
         
         # If no filters, execute a simple query
         if not self.filters:
+            print("No filters, executing simple query",self.base_table,column_str)
             query = f"SELECT {column_str} FROM {self.base_table}"
             self.cursor.execute(query)
             self.results = self.cursor.fetchall()
-            return True
+    
+            return self.results
         
         # Start building the CTE query
         cte_parts = []
@@ -229,7 +233,7 @@ class KB_Search:
         self.cursor.execute(final_query, combined_params)
         self.results = self.cursor.fetchall()
         
-        return True
+        return self.results
     
     def get_results(self):
         """
@@ -240,42 +244,61 @@ class KB_Search:
             or empty list if no results or query hasn't been executed
         """
         return self.results if self.results else []
+    
+    def find_description(self, key_data):
+        if isinstance(key_data, tuple):
+            key_data = [key_data]
+        return_values = []
+       
+        for key in key_data:
+    
+            properties = key[3]
+            if "description" in properties:
+               description = properties["description"]
+            else:
+               description = ""
+            return_values.append({key[5]:description})
+        return return_values
+   
+    
 
 # Example usage:
 if __name__ == "__main__":
     # Create a new KB_Search instance
-    kb_search = KB_Search()
-    
-    # Connect to the database
-    kb_search.connect(
+    kb_search = KB_Search(
         dbname="knowledge_base",
         user="gedgar",
         password="ready2go",
         host="localhost",
         port="5432"
     )
-    '''  
+    
+    
+   
     kb_search.clear_filters()
-    kb_search.search_property_key('prop1')
-    kb_search.search_property_value('prop1', 'val1')
-    kb_search.search_name("header1_name")  
-    kb_search.search_label("header1_link")
-    '''
-    kb_search.search_path( "header1_link.*")  
+    kb_search.search_property_key('prop3')
+    #kb_search.search_property_value('prop3', 'val3')
+    #kb_search.search_name("info1_status")  
+    #kb_search.search_label("KB_STATUS_FIELD")
+
+    #kb_search.search_path( "header1_link.header1_name.KB_STATUS_FIELD.info1_status")  
     
     
     # Execute the query with all filters
     if kb_search.execute_query():
         # Get and process results
         results = kb_search.get_results()
+   
         print(f"Found {len(results)} matching rows:")
+       
+            
         for row in results:
-            print(f"ID: {row['id']}, Label: {row['label']}, Name: {row['name']}")
-            print(f"Path: {row['path']}")
-            print(f"Properties: {row['properties']}")
-            print("---")
-    else:
-        print("Query execution failed")
+                print(f"ID: {row[0]}, Label: {row[1]}, Name: {row[2]}")
+                print(f"Properties: {row[3]}")
+                print(f"Data: {row[4]}")
+                print(f"Path: {row[5]}")
+                print("---")
+       
     
     # Clean up
     kb_search.disconnect()

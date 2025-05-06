@@ -113,7 +113,7 @@ class Construct_KB:
         self.cursor = None
         self.conn = None
         
-    def add_header_node(self, link, node_name, node_properties, node_data):
+    def add_header_node(self, link, node_name, node_properties, node_data,description=None):
         """
         Adds a header node to the knowledge base.
 
@@ -123,6 +123,9 @@ class Construct_KB:
             node_properties: Properties associated with the header node.
             node_data: Data associated with the header node.
         """
+        if description != None:
+            node_properties["description"] = description
+            
         if not self.conn or not self.cursor:
             raise ValueError("Database connection not established")
 
@@ -142,13 +145,13 @@ class Construct_KB:
         
         # Convert Python dictionaries to JSON strings
         json_properties = json.dumps(node_properties) if node_properties else None
-        json_data = json.dumps(node_data) if node_data else None
+        json_data = json.dumps(node_data) if node_data else {}
         
         self.cursor.execute(insert_query, (link, node_name, json_properties, json_data, node_path))
         self.conn.commit()
 
-    def add_info_node(self, link, node_name, node_properties, node_data):
-        self.add_header_node(link, node_name, node_properties, node_data)
+    def add_info_node(self, link, node_name, node_properties, node_data,description=None):
+        self.add_header_node(link, node_name, node_properties, node_data,description)
      
         self.path.pop()  # Remove node_name
         self.path.pop()  # Remove link

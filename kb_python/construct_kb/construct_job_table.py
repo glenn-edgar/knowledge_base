@@ -65,18 +65,18 @@ class Construct_Job_Table:
         if not isinstance(job_length, int):
             raise TypeError("job_length must be an integer")
         properties = {'job_length': job_length}
-        properties_json = json.dumps(properties)
        
-        data_json = json.dumps(description)
+       
+        data_json = json.dumps({})
         
         # Add the node to the knowledge base
-        self.construct_kb.add_info_node("KB_JOB_QUEUE", job_key, properties_json, data_json)
+        self.construct_kb.add_info_node("KB_JOB_QUEUE", job_key, properties, data_json,description)
         
-        print(f"Added job field '{job_key}' with properties: {properties_json} and data: {data_json}")
+        print(f"Added job field '{job_key}' with properties: {properties} and data: {data_json}")
         
         return {
-            "stream": "success",
-            "message": f"stream field '{job_key}' added successfully",
+            "job": "success",
+            "message": f"job field '{job_key}' added successfully",
             "properties": properties,
             "data":data_json
         }
@@ -90,6 +90,9 @@ class Construct_Job_Table:
             specified_job_paths (list): Array of valid LTREE paths
             specified_job_length (list): Array of corresponding lengths for each path
         """
+        print(f"specified_job_paths: {specified_job_paths}")
+        print(f"specified_job_length: {specified_job_length}")
+       
         # Iterate through the arrays of paths and lengths
         for i in range(len(specified_job_paths)):
             path = specified_job_paths[i]
@@ -98,7 +101,8 @@ class Construct_Job_Table:
             # Get current count for this path
             self.cursor.execute("SELECT COUNT(*) FROM job_table.job_table WHERE path = %s;", (path,))
             current_count = self.cursor.fetchone()[0]
-            
+            print(f"current_count: {current_count}")
+       
             # Calculate the difference
             diff = target_length - current_count
             
@@ -119,12 +123,13 @@ class Construct_Job_Table:
                 # Need to add records for this path
                 for _ in range(diff):
                     self.cursor.execute("""
-                        INSERT INTO job_table.job_table (path, schedule_at,started_at,completed_at ,  is_active,vald data)
-                        VALUES (%s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,FALSE,NULL);
+                        INSERT INTO job_table.job_table (path, schedule_at,started_at,completed_at ,  is_active,valid ,data)
+                        VALUES (%s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,FALSE,FALSE,'{}');
                     """, (path,))
         
         # Commit all changes at once
         self.conn.commit()
+        
        
     def _remove_invalid_job_fields(self, invalid_job_paths, chunk_size=500):
         """
@@ -166,18 +171,23 @@ class Construct_Job_Table:
         self.cursor.execute("""
             SELECT DISTINCT path::text FROM job_table.job_table;
         """)
-        unique_job_paths = [row[0] for row in self.cursor.fetchall()]
+        results = self.cursor.fetchall()
         
+        unique_job_paths = [row[0] for row in results]
+       
         # Get specified paths (paths with label "KB_JOB_QUEUE") from knowledge_table
         self.cursor.execute("""
             SELECT path, label, name,properties FROM knowledge_base.knowledge_base 
             WHERE label = 'KB_JOB_QUEUE';
         """)
         specified_job_data = self.cursor.fetchall()
-        specified_job_paths = [row[0] for row in specified_job_data]
+        print(f"specified_job_data: {specified_job_data}")
+        specified_job_paths = [row[1] for row in specified_job_data]
         specified_job_length = [row[3]['job_length'] for row in specified_job_data]
+        print(f"specified_job_paths: {specified_job_paths}")
+        print(f"specified_job_length: {specified_job_length}")
         invalid_job_paths = [path for path in unique_job_paths if path not in specified_job_paths]
-        missing_job_paths = [path for path in specified_job_paths if path not in unique_job_paths]
+        #missing_job_paths = [path for path in specified_job_paths if path not in unique_job_paths]
  
         self._remove_invalid_job_fields(invalid_job_paths)
         self._manage_job_table( specified_job_paths,specified_job_length)

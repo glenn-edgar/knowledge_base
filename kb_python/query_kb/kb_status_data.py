@@ -7,38 +7,66 @@ class KB_Status_Data:
     def __init__(self, kb_search):
         self.kb_search = kb_search
     
-    def find_node_id(self, node_name, properties, node_path, data):
+    def find_node_id(self, node_name, properties, node_path):
         """
         Find the node id for a given node name, properties, node path, and data.
         """
+        print(node_name, properties, node_path)
+        result = self.find_node_ids(node_name, properties, node_path)
+        if len(result) == 0:
+            raise ValueError(f"No node found matching path parameters: {node_name}, {properties}, {node_path}")
+        if len(result) > 1:
+            raise ValueError(f"Multiple nodes found matching path parameters: {node_name}, {properties}, {node_path}")
+        return result
+    
+    def find_node_ids(self, node_name, properties, node_path):
+        """
+        Find the node id for a given node name, properties, node path :
+        """
+        print(node_name, properties, node_path)
         self.kb_search.clear_filters()
         self.kb_search.search_label("KB_STATUS_FIELD")
-        self.kb_search.search_name(node_name)
-        for key in properties:
-            self.kb_search.search_property_value(key, properties[key])
-        self.kb_search.search_path(node_path)
-        self.kb_search.execute_query()
-        node_id = self.kb_search.cursor.fetchone()[0]
-        if node_id is None:
-            raise ValueError(f"No node found matching path parameters: {node_name}, {properties}, {node_path}, {data}")
-        return node_id
+        if node_name is not None:
+            self.kb_search.search_name(node_name)
+        if properties is not None:
+            for key in properties:
+                self.kb_search.search_property_value(key, properties[key])
+        if node_path is not None:
+            self.kb_search.search_path(node_path)
+        node_ids = self.kb_search.execute_query()
+        
+        if node_ids is None:
+            raise ValueError(f"No node found matching path parameters: {node_name}, {properties}, {node_path}")
+        if len(node_ids) == 0:
+            raise ValueError(f"No node found matching path parameters: {node_name}, {properties}, {node_path}")
+        return node_ids
+    
+    def find_status_table_keys(self, key_data):
+       
+            
+        return_values = []
+        for key in key_data:
+            
+            return_values.append(key[5])
+        return return_values
+    
+
     
     def get_status_data(self, path):
         # Prepare the SQL query
         query = """
-        SELECT data
+        SELECT data,path
         FROM status_table.status_table
-        WHERE path = %s;
+        where path = %s;
         """
-        
-        # Execute the query
         self.kb_search.cursor.execute(query, (path,))
-        
-        # Fetch the result
-        result = self.kb_search.cursor.fetchone()
+        result = self.kb_search.cursor.fetchall()
+
+      
+      
         if result is None:
             raise ValueError(f"No data found for path: {path}")
-        return json.loads(result[0])
+        return result[0]
     
     def set_status_data(self, path, data):
         # Ensure data is a dictionary
@@ -52,14 +80,14 @@ class KB_Status_Data:
         UPDATE status_table.status_table
         SET data = %s
         WHERE path = %s
-        RETURNING id;
+        RETURNING path;
         """
         
         # Execute the update query
         self.kb_search.cursor.execute(update_query, (json_data, path))
         
         # Fetch the result
-        updated_id = self.kb_search.cursor.fetchone()
+        updated_id = self.kb_search.cursor.fetchall()
         
         self.kb_search.conn.commit()
         

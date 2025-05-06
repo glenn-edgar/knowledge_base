@@ -32,9 +32,6 @@ class Construct_Status_Table:
             CREATE SCHEMA IF NOT EXISTS status_table;
             CREATE TABLE IF NOT EXISTS status_table.status_table(
                 id SERIAL PRIMARY KEY,
-                label VARCHAR NOT NULL,
-                name VARCHAR NOT NULL,
-                properties JSON,
                 data JSON,
                 path LTREE UNIQUE
             );
@@ -43,7 +40,7 @@ class Construct_Status_Table:
         self.conn.commit()  # Commit the changes
         print("Status table created.")
 
-    def add_status_field(self, status_key,  description,initial_data):
+    def add_status_field(self, status_key, properties, description,initial_data):
         """
         Add a new status field to the knowledge base
         
@@ -63,20 +60,24 @@ class Construct_Status_Table:
         if not isinstance(initial_data, dict):
             raise TypeError("initial_data must be a dictionary")
             
-        # Convert dictionaries to JSON strings
-        properties_json = json.dumps(initial_data)
-        data_json = json.dumps(description)
+        if  properties == None:
+            initial_properties = {}
+        if not isinstance(properties, dict):
+            raise TypeError("properties must be a dictionary")
+       
+        
+        print(f"Added status field '{status_key}' with properties: {properties} and data: {initial_data}")
         
         # Add the node to the knowledge base
-        self.construct_kb.add_info_node("KB_STATUS_FIELD", status_key, properties_json, data_json)
+        self.construct_kb.add_info_node("KB_STATUS_FIELD", status_key, properties, initial_data,description)
         
-        print(f"Added status field '{status_key}' with properties: {properties_json} and data: {data_json}")
+        
         
         return {
             "status": "success",
             "message": f"Status field '{status_key}' added successfully",
-            "properties": initial_data,
-            "data": description
+            "properties": properties,
+            "data": initial_data
         }
     
     def check_installation(self):     
@@ -93,20 +94,22 @@ class Construct_Status_Table:
         
         # Get specified paths (paths with label "KB_STATUS_FIELD") from knowledge_table
         self.cursor.execute("""
-            SELECT path, label, name FROM knowledge_base.knowledge_base 
+            SELECT path FROM knowledge_base.knowledge_base 
             WHERE label = 'KB_STATUS_FIELD';
         """)
         specified_paths_data = self.cursor.fetchall()
         specified_paths = [row[0] for row in specified_paths_data]
+        print(f"specified_paths: {specified_paths}")
         
         # Find missing_paths: paths in specified_paths that are not in all_paths
         missing_paths = [path for path in specified_paths if path not in all_paths]
-        
+        print(f"missing_paths: {missing_paths}")
         # Find not_specified_paths: paths in all_paths that are not in specified_paths
         not_specified_paths = [path for path in all_paths if path not in specified_paths]
-        
+        print(f"not_specified_paths: {not_specified_paths}")
         # Process not_specified_paths: remove entries from status_table
         for path in not_specified_paths:
+            print(f"deleting path: {path}")
             self.cursor.execute("""
                 DELETE FROM status_table.status_table
                 WHERE path = %s;
@@ -115,15 +118,13 @@ class Construct_Status_Table:
         # Process missing_paths: add entries to status_table
         for path in missing_paths:
             # Find the corresponding data in specified_paths_data
-            for sp_path, label, name in specified_paths_data:
-                if sp_path == path:
-                    # Insert with empty JSON objects for properties and data
-                    self.cursor.execute("""
-                        INSERT INTO status_table.status_table 
-                        (label, name, properties, data, path)
-                        VALUES (%s, %s, %s, %s, %s);
-                    """, (label, name, '{}', '{}', path))
-                    break
+            print(f"inserting path: {path}")
+            self.cursor.execute("""
+                INSERT INTO status_table.status_table 
+                        (data, path)
+                        VALUES ( %s, %s);
+                    """,  ('{}', path,))
+                    
         
         # Commit the changes
         self.conn.commit()
@@ -135,81 +136,4 @@ class Construct_Status_Table:
         
    
     
-    def diag_function(self):
-        """
-        Diagnostic function that displays label, name, and node ID for all values
-        in both knowledge_base and status_table where label = 'KB_STATUS_FIELD'
-        
-        Returns:
-            dict: Dictionary containing diagnostic information from both tables
-        """
-        results = {
-            "knowledge_table": [],
-            "status_table": []
-        }
-        
-        # Query knowledge_base table
-        self.cursor.execute("""
-            SELECT id, label, name, path::text
-            FROM knowledge_base.knowledge_base 
-            WHERE label = 'KB_STATUS_FIELD'
-            ORDER BY path;
-        """)
-        kb_rows = self.cursor.fetchall()
-        
-        # Query status_table
-        self.cursor.execute("""
-            SELECT id, label, name, path::text
-            FROM status_table.status_table
-            WHERE label = 'KB_STATUS_FIELD'
-            ORDER BY path;
-        """)
-        st_rows = self.cursor.fetchall()
-        
-        # Process knowledge_base results
-        print("=== KNOWLEDGE BASE TABLE ENTRIES ===")
-        if kb_rows:
-            # Print header
-            print(f"{'ID':<6} {'LABEL':<20} {'NAME':<30} {'PATH'}")
-            print("-" * 80)
-            
-            # Print data rows
-            for row in kb_rows:
-                node_id, label, name, path = row
-                print(f"{node_id:<6} {label:<20} {name:<30} {path}")
-                results["knowledge_table"].append({
-                    "id": node_id,
-                    "label": label,
-                    "name": name,
-                    "path": path
-                })
-        else:
-            print("No entries with label 'KB_STATUS_FIELD' found")
-        
-        # Process status_table results
-        print("\n=== STATUS TABLE ENTRIES ===")
-        if st_rows:
-            # Print header
-            print(f"{'ID':<6} {'LABEL':<20} {'NAME':<30} {'PATH'}")
-            print("-" * 80)
-            
-            # Print data rows
-            for row in st_rows:
-                node_id, label, name, path = row
-                print(f"{node_id:<6} {label:<20} {name:<30} {path}")
-                results["status_table"].append({
-                    "id": node_id,
-                    "label": label,
-                    "name": name,
-                    "path": path
-                })
-        else:
-            print("No entries with label 'KB_STATUS_FIELD' found")
-        
-        # Print summary
-        print("\n=== SUMMARY ===")
-        print(f"Knowledge Base: {len(kb_rows)} entries with label 'KB_STATUS_FIELD'")
-        print(f"Status Table: {len(st_rows)} entries with label 'KB_STATUS_FIELD'")
-        
-        # Return the raw data as well for programmatic use
-        return results
+ 
