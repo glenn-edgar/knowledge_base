@@ -49,3 +49,34 @@ class KB_Job_Queue:
             
             return_values.append(key[5])
         return return_values
+    
+    def get_queued_number(self,path):
+        """
+        Get the queued number for a given path.
+        """
+        pass
+    def get_free_number(self,path):
+        """
+        Get the free number for a given path.
+        """
+        pass
+    
+    def peak_job_data(self,path):
+        """
+        Get the job data for a given path.
+        """
+        pass
+    
+    def get_job_data(self,path):
+        """
+        Get the job data for a given path.
+        """
+        pass
+    
+    def push_job_data(self,path,data):
+        """
+        Push the job data for a given path.
+        """
+        pass
+    
+    

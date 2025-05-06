@@ -2,7 +2,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from kb_query_support import KB_Search
 from kb_status_data import KB_Status_Data
-from kb_job_client import KB_Job_Queue
+from kb_job_table import KB_Job_Queue
 class KB_Data_Structures:
     """
     A class to handle the data structures for the knowledge base.
