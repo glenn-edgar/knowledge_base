@@ -182,7 +182,7 @@ class Construct_Job_Table:
         """)
         specified_job_data = self.cursor.fetchall()
         print(f"specified_job_data: {specified_job_data}")
-        specified_job_paths = [row[1] for row in specified_job_data]
+        specified_job_paths = [row[0] for row in specified_job_data]
         specified_job_length = [row[3]['job_length'] for row in specified_job_data]
         print(f"specified_job_paths: {specified_job_paths}")
         print(f"specified_job_length: {specified_job_length}")

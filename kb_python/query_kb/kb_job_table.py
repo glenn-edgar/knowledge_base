@@ -6,6 +6,8 @@ class KB_Job_Queue:
     """
     def __init__(self, kb_search):
         self.kb_search = kb_search
+        self.conn = self.kb_search.conn
+        self.cursor = self.kb_search.cursor 
     
     def find_job_id(self, node_name, properties, node_path):
         """
@@ -50,33 +52,290 @@ class KB_Job_Queue:
             return_values.append(key[5])
         return return_values
     
-    def get_queued_number(self,path):
+    def get_queued_number(self, path):
         """
-        Get the queued number for a given path.
+        Count the number of job entries where valid is true for a given path.
+        
+        Args:
+            path (str): The path to search for in LTREE format
+        
+        Returns:
+            int: Number of valid jobs for the given path
         """
-        pass
-    def get_free_number(self,path):
+        query = """
+            SELECT COUNT(*)
+            FROM job_table.job_table
+            WHERE path = %s
+            AND valid = TRUE
         """
-        Get the free number for a given path.
+        
+        self.cursor.execute(query, (path,))
+        count = self.cursor.fetchone()[0]
+        return count
+        
+    def get_free_number(self, path):
         """
-        pass
+        Count the number of job entries where valid is false for a given path.
+        
+        Args:
+            path (str): The path to search for in LTREE format
+        
+        Returns:
+            int: Number of invalid jobs for the given path
+        """
+        query = """
+            SELECT COUNT(*)
+            FROM job_table.job_table
+            WHERE path = %s
+            AND valid = FALSE
+        """
+        
+        self.cursor.execute(query, (path,))
+        count = self.cursor.fetchone()[0]
+        return count
     
-    def peak_job_data(self,path):
+    def peak_job_data(self, path):
         """
-        Get the job data for a given path.
+        Find the job with the earliest schedule_at time for a given path where 
+        valid is true, update its started_at timestamp to current time,
+        set is_active to false, and return the data and schedule_at.
+        
+        Args:
+            path (str): The path to search for in LTREE format
+        
+        Returns:
+            tuple/None: A tuple containing (id, data, schedule_at) from the job, or None if no jobs found
         """
-        pass
+        # Find the job with the earliest schedule_at time
+        find_query = """
+            SELECT id, data, schedule_at
+            FROM job_table.job_table
+            WHERE path = %s
+            AND valid = TRUE
+            ORDER BY schedule_at ASC
+            LIMIT 1
+        """
+        
+        self.cursor.execute(find_query, (path,))
+        result = self.cursor.fetchone()
+        
+        if result:
+            job_id, job_data, schedule_at = result
+            
+            # Update the started_at field to current time and set is_active to false
+            update_query = """
+                UPDATE job_table.job_table
+                SET started_at = NOW(),
+                    is_active = TRUE
+                WHERE id = %s
+            """
+            
+            self.cursor.execute(update_query, (job_id,))
+            self.conn.commit()  # Commit the transaction
+            
+            return job_id, job_data, schedule_at  # Return both the data JSON field and schedule_at
+        else:
+            return None
     
-    def get_job_data(self,path):
+    def delete_job_data(self, id):
         """
-        Get the job data for a given path.
+        Mark a record matching the given id as completed.
+        
+        Args:
+            id (int): The ID of the job record
+            
+        Returns:
+            bool: True if the operation was successful
+            
+        Raises:
+            Exception: If no matching record is found
         """
-        pass
+        # Update the record directly and check if it was found
+        update_query = """
+            UPDATE job_table.job_table
+            SET completed_at = NOW(),
+                valid = FALSE,
+                is_active = FALSE
+            WHERE id = %s
+            RETURNING id
+        """
+        
+        self.cursor.execute(update_query, (id,))
+        result = self.cursor.fetchone()
+        self.conn.commit()
+        
+        if result is None:
+            raise Exception(f"No record found for id: {id}")
+        
+        return True
     
-    def push_job_data(self,path,data):
+    def push_job_data(self, path, data):
         """
-        Push the job data for a given path.
+        Find an available record (valid=False) for the given path with the earliest completed_at time,
+        update it with new data, and prepare it for scheduling.
+        
+        Args:
+            path (str): The path in LTREE format
+            data (dict): The JSON data to insert
+            
+        Returns:
+            int: The ID of the updated record
+            
+        Raises:
+            Exception: If no available record is found
         """
-        pass
+        # Find a record with the given path where valid is false
+        find_query = """
+            SELECT id
+            FROM job_table.job_table
+            WHERE path = %s
+            AND valid = FALSE
+            ORDER BY completed_at ASC
+            LIMIT 1
+        """
+        
+        self.cursor.execute(find_query, (path,))
+        result = self.cursor.fetchone()
+        
+        if result is None:
+            raise Exception(f"No available record found for path: {path}")
+        
+        job_id = result[0]
+        
+        # Update the found record with the new data
+        update_query = """
+            UPDATE job_table.job_table
+            SET data = %s,
+                valid = TRUE,
+                is_active = FALSE,
+                schedule_at = NOW()
+            WHERE id = %s
+            RETURNING id
+        """
+        
+        self.cursor.execute(update_query, (json.dumps(data), job_id))
+        update_result = self.cursor.fetchone()
+        self.conn.commit()
+        
+        return job_id 
+    
+    def list_pending_jobs(self, path):
+        """
+        List all jobs for a given path where valid is True and is_active is False,
+        ordered by schedule_at with earliest first.
+        
+        Args:
+            path (str): The path to search for in LTREE format
+        
+        Returns:
+            list: A list of dictionaries containing all job details
+        """
+        query = """
+            SELECT id, path, schedule_at, started_at, completed_at, is_active, valid, data
+            FROM job_table.job_table
+            WHERE path = %s
+            AND valid = TRUE
+            AND is_active = FALSE
+            ORDER BY schedule_at ASC
+        """
+        
+        self.cursor.execute(query, (path,))
+        results = self.cursor.fetchall()
+        
+        # Convert results to a list of dictionaries
+        jobs = []
+        for row in results:
+            job = {
+                'id': row[0],
+                'path': row[1],
+                'schedule_at': row[2],
+                'started_at': row[3],
+                'completed_at': row[4],
+                'is_active': row[5],
+                'valid': row[6],
+                'data': row[7]
+            }
+            jobs.append(job)
+        
+        return jobs
     
     
+    def list_active_jobs(self, path):
+        """
+        List all jobs for a given path where valid is True and is_active is True,
+        ordered by schedule_at with earliest first.
+        
+        Args:
+            path (str): The path to search for in LTREE format
+        
+        Returns:
+            list: A list of dictionaries containing all job details
+        """
+        query = """
+            SELECT id, path, schedule_at, started_at, completed_at, is_active, valid, data
+            FROM job_table.job_table
+            WHERE path = %s
+            AND valid = TRUE
+            AND is_active = TRUE
+            ORDER BY started_at ASC
+        """
+        
+        self.cursor.execute(query, (path,))
+        results = self.cursor.fetchall()
+        
+        # Convert results to a list of dictionaries
+        jobs = []
+        for row in results:
+            job = {
+                'id': row[0],
+                'path': row[1],
+                'schedule_at': row[2],
+                'started_at': row[3],
+                'completed_at': row[4],
+                'is_active': row[5],
+                'valid': row[6],
+                'data': row[7]
+            }
+            jobs.append(job)
+        
+        return jobs
+    
+    def list_completed_jobs(self, path):
+        """
+        List all jobs for a given path where valid is False and is_active is False,
+        ordered by completed_at with earliest first.
+        
+        Args:
+            path (str): The path to search for in LTREE format
+        
+        Returns:
+            list: A list of dictionaries containing all job details
+        """
+        query = """
+            SELECT id, path, schedule_at, started_at, completed_at, is_active, valid, data
+            FROM job_table.job_table
+            WHERE path = %s
+            AND valid = FALSE
+            AND is_active = FALSE
+            ORDER BY completed_at ASC
+        """
+        
+        self.cursor.execute(query, (path,))
+        results = self.cursor.fetchall()
+        
+        # Convert results to a list of dictionaries
+        jobs = []
+        for row in results:
+            job = {
+                'id': row[0],
+                'path': row[1],
+                'schedule_at': row[2],
+                'started_at': row[3],
+                'completed_at': row[4],
+                'is_active': row[5],
+                'valid': row[6],
+                'data': row[7]
+            }
+            jobs.append(job)
+        
+        return jobs

@@ -29,7 +29,14 @@ class KB_Data_Structures:
         self.find_job_ids = self.job_queue.find_job_ids
         self.find_job_id = self.job_queue.find_job_id
         self.find_job_table_keys = self.job_queue.find_job_table_keys
-        
+        self.get_queued_number = self.job_queue.get_queued_number
+        self.get_free_number = self.job_queue.get_free_number
+        self.peak_job_data = self.job_queue.peak_job_data
+        self.delete_job_data = self.job_queue.delete_job_data
+        self.push_job_data = self.job_queue.push_job_data
+        self.list_pending_jobs = self.job_queue.list_pending_jobs
+        self.list_active_jobs = self.job_queue.list_active_jobs
+        self.list_completed_jobs = self.job_queue.list_completed_jobs
  # Example usage:
 if __name__ == "__main__":
     # Create a new KB_Search instance
@@ -78,7 +85,48 @@ if __name__ == "__main__":
     Job Queue
     """
     
-    node_ids = kb_data_structures.find_job_ids(node_name = None, properties = None, node_path = None)
-    print("jobnode_ids",node_ids)
+    print("***************************  job queue data ***************************")
     
+    node_ids = kb_data_structures.find_job_ids(node_name = None, properties = None, node_path = None)
+    print("node_ids",node_ids)
+    job_table_keys = kb_data_structures.find_job_table_keys(node_ids)
+    print("jobnode_ids",job_table_keys)
+    job_key = job_table_keys[0]
+    print("job_key",job_key)
+    queued_number = kb_data_structures.get_queued_number(job_key)
+    print("queued_number",queued_number)
+    
+    free_number = kb_data_structures.get_free_number(job_key)
+    print("free_number",free_number)
+    
+    print("peak_job_data",kb_data_structures.peak_job_data(job_key))
+    print("push_job_data")
+    kb_data_structures.push_job_data(job_key, {"prop1": "val1", "prop2": "val2"})
+    queued_number = kb_data_structures.get_queued_number(job_key)
+    print("queued_number",queued_number)
+    
+    free_number = kb_data_structures.get_free_number(job_key)
+    print("free_number",free_number)
+    print("list_pending_jobs",kb_data_structures.list_pending_jobs(job_key))
+    print("list_active_jobs",kb_data_structures.list_active_jobs(job_key))
+    print("list_completed_jobs",kb_data_structures.list_completed_jobs(job_key))
+    
+    job_data = kb_data_structures.peak_job_data(job_key)
+    job_id = job_data[0]
+    print("job_id",job_id)
+    print("job_data",job_data)
+    free_number = kb_data_structures.get_free_number(job_key)
+    print("free_number",free_number)
+    print("list_pending_jobs",kb_data_structures.list_pending_jobs(job_key))
+    print("list_active_jobs",kb_data_structures.list_active_jobs(job_key))
+    
+    kb_data_structures.delete_job_data(job_id)
+    free_number = kb_data_structures.get_free_number(job_key)
+    print("free_number",free_number)
+    print("list_pending_jobs",kb_data_structures.list_pending_jobs(job_key))
+    print("list_active_jobs",kb_data_structures.list_active_jobs(job_key))
+    print("peak_job_data",kb_data_structures.peak_job_data(job_key))
+    """
+      Stream tables
+    """
     kb_data_structures.query_support.disconnect()
