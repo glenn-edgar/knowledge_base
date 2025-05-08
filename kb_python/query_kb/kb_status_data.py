@@ -53,45 +53,124 @@ class KB_Status_Data:
 
     
     def get_status_data(self, path):
-        # Prepare the SQL query
-        query = """
-        SELECT data,path
-        FROM status_table.status_table
-        where path = %s;
         """
-        self.kb_search.cursor.execute(query, (path,))
-        result = self.kb_search.cursor.fetchall()
-
-      
-      
-        if result is None:
-            raise ValueError(f"No data found for path: {path}")
-        return result[0]
-    
+        Retrieve status data for a given path.
+        
+        Args:
+            path (str): The path to search for
+            
+        Returns:
+            tuple: A tuple containing (data_dict, path) where data_dict is a Python dictionary
+            
+        Raises:
+            Exception: If no data is found or a database error occurs
+        """
+        try:
+            # Prepare the SQL query
+            query = """
+            SELECT data, path
+            FROM status_table.status_table
+            WHERE path = %s
+            """
+            
+            self.kb_search.cursor.execute(query, (path,))
+            result = self.kb_search.cursor.fetchone()
+            
+            if result is None:
+                raise Exception(f"No data found for path: {path}")
+            
+            # Convert JSON data to Python dictionary
+            # PostgreSQL's JSON type should already be converted by the psycopg2 driver
+            # but we'll handle both possibilities
+            data, path_value = result
+            
+            # If data is still a string (some older psycopg2 versions), parse it
+            if isinstance(data, str):
+                try:
+                    data = json.loads(data)
+                except json.JSONDecodeError:
+                    raise Exception(f"Failed to decode JSON data for path: {path}")
+                    
+            return data, path_value
+            
+        except Exception as e:
+            # If it's not our custom exception, wrap it with more context
+            if not str(e).startswith(("No data found", "Failed to decode")):
+                raise Exception(f"Error retrieving status data: {str(e)}")
+            raise
+        
     def set_status_data(self, path, data):
+        """
+        Update status data for a given path.
+        
+        Args:
+            path (str): The path to update
+            data (dict): The data to store
+            
+        Returns:
+            tuple: (bool, str) indicating success/failure and a message
+            
+        Raises:
+            ValueError: If data is not a dictionary
+            Exception: If the update fails or a database error occurs
+        """
         # Ensure data is a dictionary
         if not isinstance(data, dict):
             raise ValueError("Data must be a dictionary")
         
-        json_data = json.dumps(data, indent=4)
-        
-        # Prepare the SQL query to update the data column
-        update_query = """
-        UPDATE status_table.status_table
-        SET data = %s
-        WHERE path = %s
-        RETURNING path;
-        """
-        
-        # Execute the update query
-        self.kb_search.cursor.execute(update_query, (json_data, path))
-        
-        # Fetch the result
-        updated_id = self.kb_search.cursor.fetchall()
-        
-        self.kb_search.conn.commit()
-        
-        if updated_id:
-            return True, f"Successfully updated data for record with ID: {updated_id[0]}"
-        else:
-            raise ValueError("Update operation failed for unknown reason")
+        try:
+            json_data = json.dumps(data)  # Remove indent for storage efficiency
+            
+            # First check if the record exists
+            check_query = """
+            SELECT 1 FROM status_table.status_table
+            WHERE path = %s
+            """
+            
+            self.kb_search.cursor.execute(check_query, (path,))
+            record_exists = self.kb_search.cursor.fetchone() is not None
+            
+            if record_exists:
+                # Update existing record
+                update_query = """
+                UPDATE status_table.status_table
+                SET data = %s
+                WHERE path = %s
+                RETURNING path
+                """
+                
+                self.kb_search.cursor.execute(update_query, (json_data, path))
+                operation = "updated"
+            else:
+                # Insert new record
+                insert_query = """
+                INSERT INTO status_table.status_table (path, data)
+                VALUES (%s, %s)
+                RETURNING path
+                """
+                
+                self.kb_search.cursor.execute(insert_query, (path, json_data))
+                operation = "inserted"
+            
+            # Fetch the result
+            result = self.kb_search.cursor.fetchone()
+            
+            # Commit the transaction
+            self.kb_search.conn.commit()
+            
+            if result is not None:
+                return True, f"Successfully {operation} data for path: {result[0]}"
+            else:
+                # Rollback in case of logical errors
+                self.kb_search.conn.rollback()
+                raise Exception(f"Database operation completed but no path was returned")
+                
+        except Exception as e:
+            # Rollback the transaction on error
+            self.kb_search.conn.rollback()
+            
+            # Re-raise ValueError, but wrap other exceptions
+            if isinstance(e, ValueError):
+                raise
+            else:
+                raise Exception(f"Error setting status data: {str(e)}")

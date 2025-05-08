@@ -58,20 +58,34 @@ class KB_Job_Queue:
         
         Args:
             path (str): The path to search for in LTREE format
-        
+            
         Returns:
             int: Number of valid jobs for the given path
+            
+        Raises:
+            Exception: If there's an error executing the query
         """
-        query = """
-            SELECT COUNT(*)
-            FROM job_table.job_table
-            WHERE path = %s
-            AND valid = TRUE
-        """
-        
-        self.cursor.execute(query, (path,))
-        count = self.cursor.fetchone()[0]
-        return count
+        try:
+            query = """
+                SELECT COUNT(*)
+                FROM job_table.job_table
+                WHERE path = %s
+                AND valid = TRUE
+            """
+            
+            self.cursor.execute(query, (path,))
+            result = self.cursor.fetchone()
+            
+            # Handle potential None result
+            if result is None:
+                return 0
+                
+            return result[0]
+            
+        except Exception as e:
+            # Since this is a read-only operation, no need to rollback
+            # But we should propagate the error
+            raise Exception(f"Error counting queued jobs: {str(e)}")
         
     def get_free_number(self, path):
         """
@@ -79,26 +93,40 @@ class KB_Job_Queue:
         
         Args:
             path (str): The path to search for in LTREE format
-        
+            
         Returns:
             int: Number of invalid jobs for the given path
+            
+        Raises:
+            Exception: If there's an error executing the query
         """
-        query = """
-            SELECT COUNT(*)
-            FROM job_table.job_table
-            WHERE path = %s
-            AND valid = FALSE
-        """
+        try:
+            query = """
+                SELECT COUNT(*)
+                FROM job_table.job_table
+                WHERE path = %s
+                AND valid = FALSE
+            """
+            
+            self.cursor.execute(query, (path,))
+            result = self.cursor.fetchone()
+            
+            # Handle potential None result
+            if result is None:
+                return 0
+                
+            return result[0]
         
-        self.cursor.execute(query, (path,))
-        count = self.cursor.fetchone()[0]
-        return count
-    
+        except Exception as e:
+            # Since this is a read-only operation, no need to rollback
+            # But we should propagate the error
+            raise Exception(f"Error counting free jobs: {str(e)}")
+        
     def peak_job_data(self, path):
         """
         Find the job with the earliest schedule_at time for a given path where 
         valid is true, update its started_at timestamp to current time,
-        set is_active to false, and return the data and schedule_at.
+        set is_active to true, and return the job information.
         
         Args:
             path (str): The path to search for in LTREE format
@@ -106,36 +134,50 @@ class KB_Job_Queue:
         Returns:
             tuple/None: A tuple containing (id, data, schedule_at) from the job, or None if no jobs found
         """
-        # Find the job with the earliest schedule_at time
-        find_query = """
-            SELECT id, data, schedule_at
-            FROM job_table.job_table
-            WHERE path = %s
-            AND valid = TRUE
-            ORDER BY schedule_at ASC
-            LIMIT 1
-        """
-        
-        self.cursor.execute(find_query, (path,))
-        result = self.cursor.fetchone()
-        
-        if result:
+        try:
+            # Find and lock the job with the earliest schedule_at time
+            find_query = """
+                SELECT id, data, schedule_at
+                FROM job_table.job_table
+                WHERE path = %s
+                AND valid = TRUE
+                AND is_active = FALSE
+                ORDER BY schedule_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            """
+            
+            self.cursor.execute(find_query, (path,))
+            result = self.cursor.fetchone()
+            
+            if result is None:
+                self.conn.rollback()
+                return None
+                
             job_id, job_data, schedule_at = result
             
-            # Update the started_at field to current time and set is_active to false
+            # Update the started_at field to current time and set is_active to true
             update_query = """
                 UPDATE job_table.job_table
                 SET started_at = NOW(),
                     is_active = TRUE
                 WHERE id = %s
+                RETURNING id
             """
             
             self.cursor.execute(update_query, (job_id,))
-            self.conn.commit()  # Commit the transaction
+            update_result = self.cursor.fetchone()
             
-            return job_id, job_data, schedule_at  # Return both the data JSON field and schedule_at
-        else:
-            return None
+            if update_result is None:
+                self.conn.rollback()
+                return None
+                
+            self.conn.commit()
+            return job_id, job_data, schedule_at
+            
+        except Exception as e:
+            self.conn.rollback()
+            raise e
     
     def delete_job_data(self, id):
         """
@@ -150,24 +192,30 @@ class KB_Job_Queue:
         Raises:
             Exception: If no matching record is found
         """
-        # Update the record directly and check if it was found
-        update_query = """
-            UPDATE job_table.job_table
-            SET completed_at = NOW(),
-                valid = FALSE,
-                is_active = FALSE
-            WHERE id = %s
-            RETURNING id
-        """
-        
-        self.cursor.execute(update_query, (id,))
-        result = self.cursor.fetchone()
-        self.conn.commit()
-        
-        if result is None:
-            raise Exception(f"No record found for id: {id}")
-        
-        return True
+        try:
+            # Update the record directly and check if it was found
+            update_query = """
+                UPDATE job_table.job_table
+                SET completed_at = NOW(),
+                    valid = FALSE,
+                    is_active = FALSE
+                WHERE id = %s
+                RETURNING id
+            """
+            
+            self.cursor.execute(update_query, (id,))
+            result = self.cursor.fetchone()
+            
+            if result is None:
+                self.conn.rollback()
+                raise Exception(f"No record found for id: {id}")
+            
+            self.conn.commit()
+            return True
+            
+        except Exception as e:
+            self.conn.rollback()
+            raise e
     
     def push_job_data(self, path, data):
         """
@@ -184,158 +232,265 @@ class KB_Job_Queue:
         Raises:
             Exception: If no available record is found
         """
-        # Find a record with the given path where valid is false
-        find_query = """
-            SELECT id
-            FROM job_table.job_table
-            WHERE path = %s
-            AND valid = FALSE
-            ORDER BY completed_at ASC
-            LIMIT 1
-        """
-        
-        self.cursor.execute(find_query, (path,))
-        result = self.cursor.fetchone()
-        
-        if result is None:
-            raise Exception(f"No available record found for path: {path}")
-        
-        job_id = result[0]
-        
-        # Update the found record with the new data
-        update_query = """
-            UPDATE job_table.job_table
-            SET data = %s,
-                valid = TRUE,
-                is_active = FALSE,
-                schedule_at = NOW()
-            WHERE id = %s
-            RETURNING id
-        """
-        
-        self.cursor.execute(update_query, (json.dumps(data), job_id))
-        update_result = self.cursor.fetchone()
-        self.conn.commit()
-        
-        return job_id 
+        # Start a transaction
+        try:
+            # Find and lock a record with the given path where valid is false
+            find_query = """
+                SELECT id
+                FROM job_table.job_table
+                WHERE path = %s
+                AND valid = FALSE
+                ORDER BY completed_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            """
+            
+            self.cursor.execute(find_query, (path,))
+            result = self.cursor.fetchone()
+            
+            if result is None:
+                self.conn.rollback()
+                raise Exception(f"No available record found for path: {path}")
+            
+            job_id = result[0]
+            
+            # Update the found record with the new data
+            update_query = """
+                UPDATE job_table.job_table
+                SET data = %s,
+                    valid = TRUE,
+                    is_active = FALSE,
+                    schedule_at = NOW()
+                WHERE id = %s
+                RETURNING id
+            """
+            
+            self.cursor.execute(update_query, (json.dumps(data), job_id))
+            update_result = self.cursor.fetchone()
+            
+            if update_result is None:
+                self.conn.rollback()
+                raise Exception(f"Failed to update record with id: {job_id}")
+                
+            self.conn.commit()
+            return job_id
+            
+        except Exception as e:
+            self.conn.rollback()
+            raise e
     
-    def list_pending_jobs(self, path):
+    def list_pending_jobs(self, path, limit=None, offset=0):
         """
         List all jobs for a given path where valid is True and is_active is False,
         ordered by schedule_at with earliest first.
         
         Args:
             path (str): The path to search for in LTREE format
+            limit (int, optional): Maximum number of jobs to return
+            offset (int, optional): Number of jobs to skip
         
         Returns:
             list: A list of dictionaries containing all job details
+            
+        Raises:
+            Exception: If there's an error executing the query
         """
-        query = """
-            SELECT id, path, schedule_at, started_at, completed_at, is_active, valid, data
-            FROM job_table.job_table
-            WHERE path = %s
-            AND valid = TRUE
-            AND is_active = FALSE
-            ORDER BY schedule_at ASC
-        """
+        try:
+            # Build the query with optional LIMIT and OFFSET
+            query = """
+                SELECT id, path, schedule_at, started_at, completed_at, is_active, valid, data
+                FROM job_table.job_table
+                WHERE path = %s
+                AND valid = TRUE
+                AND is_active = FALSE
+                ORDER BY schedule_at ASC
+            """
+            
+            params = [path]
+            
+            if limit is not None:
+                query += " LIMIT %s"
+                params.append(limit)
+                
+            if offset > 0:
+                query += " OFFSET %s"
+                params.append(offset)
+                
+            self.cursor.execute(query, params)
+            results = self.cursor.fetchall()
+            
+            # Get column names from cursor description
+            column_names = [desc[0] for desc in self.cursor.description]
+            
+            # Convert results to a list of dictionaries using column names
+            jobs = []
+            for row in results:
+                job = dict(zip(column_names, row))
+                jobs.append(job)
+            
+            return jobs
         
-        self.cursor.execute(query, (path,))
-        results = self.cursor.fetchall()
+        except Exception as e:
+            # This is a read-only operation, so no need to rollback
+            raise Exception(f"Error listing pending jobs: {str(e)}")
         
-        # Convert results to a list of dictionaries
-        jobs = []
-        for row in results:
-            job = {
-                'id': row[0],
-                'path': row[1],
-                'schedule_at': row[2],
-                'started_at': row[3],
-                'completed_at': row[4],
-                'is_active': row[5],
-                'valid': row[6],
-                'data': row[7]
-            }
-            jobs.append(job)
         
-        return jobs
-    
-    
-    def list_active_jobs(self, path):
+    def list_active_jobs(self, path, limit=None, offset=0):
         """
         List all jobs for a given path where valid is True and is_active is True,
-        ordered by schedule_at with earliest first.
+        ordered by started_at with earliest first.
         
         Args:
             path (str): The path to search for in LTREE format
+            limit (int, optional): Maximum number of jobs to return
+            offset (int, optional): Number of jobs to skip
         
         Returns:
             list: A list of dictionaries containing all job details
+            
+        Raises:
+            Exception: If there's an error executing the query
         """
-        query = """
-            SELECT id, path, schedule_at, started_at, completed_at, is_active, valid, data
-            FROM job_table.job_table
-            WHERE path = %s
-            AND valid = TRUE
-            AND is_active = TRUE
-            ORDER BY started_at ASC
-        """
+        try:
+            # Build the query with optional LIMIT and OFFSET
+            query = """
+                SELECT id, path, schedule_at, started_at, completed_at, is_active, valid, data
+                FROM job_table.job_table
+                WHERE path = %s
+                AND valid = TRUE
+                AND is_active = TRUE
+                ORDER BY started_at ASC
+            """
+            
+            params = [path]
+            
+            if limit is not None:
+                query += " LIMIT %s"
+                params.append(limit)
+                
+            if offset > 0:
+                query += " OFFSET %s"
+                params.append(offset)
+                
+            self.cursor.execute(query, params)
+            results = self.cursor.fetchall()
+            
+            # Get column names from cursor description
+            column_names = [desc[0] for desc in self.cursor.description]
+            
+            # Convert results to a list of dictionaries using column names
+            jobs = []
+            for row in results:
+                job = dict(zip(column_names, row))
+                jobs.append(job)
+            
+            return jobs
+            
+        except Exception as e:
+            # This is a read-only operation, so no need to rollback
+            raise Exception(f"Error listing active jobs: {str(e)}")
         
-        self.cursor.execute(query, (path,))
-        results = self.cursor.fetchall()
-        
-        # Convert results to a list of dictionaries
-        jobs = []
-        for row in results:
-            job = {
-                'id': row[0],
-                'path': row[1],
-                'schedule_at': row[2],
-                'started_at': row[3],
-                'completed_at': row[4],
-                'is_active': row[5],
-                'valid': row[6],
-                'data': row[7]
-            }
-            jobs.append(job)
-        
-        return jobs
-    
-    def list_completed_jobs(self, path):
+    def list_completed_jobs(self, path, limit=None, offset=0, completed_after=None, completed_before=None):
         """
         List all jobs for a given path where valid is False and is_active is False,
         ordered by completed_at with earliest first.
         
         Args:
             path (str): The path to search for in LTREE format
+            limit (int, optional): Maximum number of jobs to return
+            offset (int, optional): Number of jobs to skip
+            completed_after (datetime, optional): Only include jobs completed after this time
+            completed_before (datetime, optional): Only include jobs completed before this time
         
         Returns:
             list: A list of dictionaries containing all job details
+            
+        Raises:
+            Exception: If there's an error executing the query
         """
-        query = """
-            SELECT id, path, schedule_at, started_at, completed_at, is_active, valid, data
-            FROM job_table.job_table
-            WHERE path = %s
-            AND valid = FALSE
-            AND is_active = FALSE
-            ORDER BY completed_at ASC
-        """
+        try:
+            # Build the base query
+            query = """
+                SELECT id, path, schedule_at, started_at, completed_at, is_active, valid, data
+                FROM job_table.job_table
+                WHERE path = %s
+                AND valid = FALSE
+                AND is_active = FALSE
+            """
+            
+            params = [path]
+            
+            # Add optional time-based filters
+            if completed_after is not None:
+                query += " AND completed_at >= %s"
+                params.append(completed_after)
+                
+            if completed_before is not None:
+                query += " AND completed_at <= %s"
+                params.append(completed_before)
+                
+            # Add ordering
+            query += " ORDER BY completed_at ASC"
+            
+            # Add optional pagination
+            if limit is not None:
+                query += " LIMIT %s"
+                params.append(limit)
+                
+            if offset > 0:
+                query += " OFFSET %s"
+                params.append(offset)
+                
+            self.cursor.execute(query, params)
+            results = self.cursor.fetchall()
+            
+            # Get column names from cursor description
+            column_names = [desc[0] for desc in self.cursor.description]
+            
+            # Convert results to a list of dictionaries using column names
+            jobs = []
+            for row in results:
+                job = dict(zip(column_names, row))
+                jobs.append(job)
+            
+            return jobs
         
-        self.cursor.execute(query, (path,))
-        results = self.cursor.fetchall()
+        except Exception as e:
+            # This is a read-only operation, so no need to rollback
+            raise Exception(f"Error listing completed jobs: {str(e)}")
         
-        # Convert results to a list of dictionaries
-        jobs = []
-        for row in results:
-            job = {
-                'id': row[0],
-                'path': row[1],
-                'schedule_at': row[2],
-                'started_at': row[3],
-                'completed_at': row[4],
-                'is_active': row[5],
-                'valid': row[6],
-                'data': row[7]
-            }
-            jobs.append(job)
         
-        return jobs
+    def clear_job_queue(self, path):
+        try:
+            # First acquire a lock on the table to prevent concurrent access
+            self.cursor.execute("LOCK TABLE job_table.job_table IN EXCLUSIVE MODE;")
+            
+            # Prepare the query to update only rows with matching path
+            # Using SQL's NOW() function for timestamps
+            update_query = """
+                UPDATE job_table.job_table
+                SET schedule_at = NOW(),
+                    started_at = NOW(),
+                    is_active = %s,
+                    valid = %s,
+                    data = %s
+                WHERE path = %s;
+            """
+            
+            # Execute the update with our parameters including the path
+            # NOW() is handled by SQL so it's not in the parameter tuple
+            self.cursor.execute(update_query, (False, False, '{}', path))
+            
+            # Get number of rows affected
+            row_count = self.cursor.rowcount
+            
+            # Commit the transaction which will automatically release all locks
+            self.conn.commit()
+            
+            return row_count
+            
+        except Exception as e:
+            # Rollback in case of error, which will also release the lock
+            self.conn.rollback()
+            print(f"Error in clear_job_queue: {str(e)}")
+            return -1

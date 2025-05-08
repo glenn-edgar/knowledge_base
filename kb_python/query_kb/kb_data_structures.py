@@ -1,8 +1,10 @@
+import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from kb_query_support import KB_Search
 from kb_status_data import KB_Status_Data
 from kb_job_table import KB_Job_Queue
+from kb_stream import KB_Stream
 class KB_Data_Structures:
     """
     A class to handle the data structures for the knowledge base.
@@ -16,6 +18,7 @@ class KB_Data_Structures:
         self.search_property_value = self.query_support.search_property_value
         self.search_path = self.query_support.search_path
         self.find_description = self.query_support.find_description
+        self.find_description_paths = self.query_support.find_description_paths
  
         self.status_data = KB_Status_Data(self.query_support)
         self.find_status_node_ids = self.status_data.find_node_ids
@@ -37,6 +40,14 @@ class KB_Data_Structures:
         self.list_pending_jobs = self.job_queue.list_pending_jobs
         self.list_active_jobs = self.job_queue.list_active_jobs
         self.list_completed_jobs = self.job_queue.list_completed_jobs
+        self.clear_job_queue = self.job_queue.clear_job_queue
+        self.stream = KB_Stream(self.query_support)
+        self.find_stream_ids = self.stream.find_stream_ids
+        self.find_stream_id = self.stream.find_stream_id
+        self.find_stream_table_keys = self.stream.find_stream_table_keys
+        self.push_stream_data = self.stream.push_stream_data
+        self.list_stream_data = self.stream.list_stream_data
+        
  # Example usage:
 if __name__ == "__main__":
     # Create a new KB_Search instance
@@ -126,7 +137,30 @@ if __name__ == "__main__":
     print("list_pending_jobs",kb_data_structures.list_pending_jobs(job_key))
     print("list_active_jobs",kb_data_structures.list_active_jobs(job_key))
     print("peak_job_data",kb_data_structures.peak_job_data(job_key))
+    kb_data_structures.clear_job_queue(job_key)
+    free_number = kb_data_structures.get_free_number(job_key)
+    print("free_number",free_number)
     """
       Stream tables
     """
+    print("***************************  stream data ***************************")
+    
+    node_ids = kb_data_structures.find_stream_ids(node_name = "info1_status", properties = None, node_path = None)
+    print("node_ids",node_ids)
+    stream_table_keys = kb_data_structures.find_stream_table_keys(node_ids)
+    print("stream_table_keys",stream_table_keys)
+    descriptions = kb_data_structures.find_description_paths(stream_table_keys)
+    print("descriptions",descriptions)
+    
+    
+    kb_data_structures.push_stream_data(stream_table_keys[0], {"prop1": "val1", "prop2": "val2"})
+    print("list_stream_data",kb_data_structures.list_stream_data(stream_table_keys[0]))
+    
+    
+    past_timestamp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=15)
+    before_timestamp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)
+    print("past_timestamp",past_timestamp)
+    print("past data")
+    print("list_stream_data",kb_data_structures.list_stream_data(stream_table_keys[0], recorded_after=past_timestamp, recorded_before=before_timestamp))
+    
     kb_data_structures.query_support.disconnect()

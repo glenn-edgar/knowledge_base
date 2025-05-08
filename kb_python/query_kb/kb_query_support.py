@@ -260,8 +260,53 @@ class KB_Search:
             return_values.append({key[5]:description})
         return return_values
    
-    
-
+    def find_description_paths(self, path_array):
+        """
+        Find data for specified paths in the knowledge base.
+        
+        Args:
+            path_array (str or list): A single path or list of paths to search for
+            
+        Returns:
+            dict: A dictionary mapping paths to their corresponding data values
+            
+        Raises:
+            Exception: If a database error occurs
+        """
+        # Normalize input to always be a list
+        if not isinstance(path_array, list):
+            path_array = [path_array]
+        
+        # Handle empty input case
+        if not path_array:
+            return {}
+        
+        return_values = {}
+        
+        try:
+            for path in path_array:
+                # Query specifically selects the data column
+                query_string = '''
+                SELECT data
+                FROM knowledge_base.knowledge_base
+                WHERE path = %s;
+                '''
+                
+                self.cursor.execute(query_string, (path,))
+                result = self.cursor.fetchone()
+                
+                if result:
+                    # Extract the data value
+                    return_values[path] = result[0]
+                else:
+                    # Handle case where path doesn't exist
+                    return_values[path] = None
+                    
+            return return_values
+            
+        except Exception as e:
+            # Handle errors gracefully
+            raise Exception(f"Error retrieving data for paths: {str(e)}")
 # Example usage:
 if __name__ == "__main__":
     # Create a new KB_Search instance

@@ -31,10 +31,11 @@ class Construct_Stream_Table:
         create_table_script = sql.SQL("""
             CREATE SCHEMA IF NOT EXISTS stream_table;
             CREATE TABLE IF NOT EXISTS stream_table.stream_table(
+                id SERIAL PRIMARY KEY,
                 path LTREE,
                 recorded_at TIMESTAMP DEFAULT NOW(),
-                data JSON,
-                valid BOOLEAN DEFAULT FALSE
+                data JSON
+              
             );
         """)
         self.cursor.execute(create_table_script)
@@ -58,15 +59,13 @@ class Construct_Stream_Table:
         
         if not isinstance(stream_length, int):
             raise TypeError("stream_length must be an integer")
-        properties = {'stream_length': stream_length}
-        properties_json = json.dumps(properties)
+        properties = {"stream_length": stream_length}
        
-        data_json = json.dumps(description)
         
         # Add the node to the knowledge base
-        self.construct_kb.add_info_node("KB_STREAM_FIELD", stream_key, properties_json, data_json)
+        self.construct_kb.add_info_node("KB_STREAM_FIELD", stream_key, properties, description)
         
-        print(f"Added stream field '{stream_key}' with properties: {properties_json} and data: {data_json}")
+        print(f"Added stream field '{stream_key}' with properties: {properties} ")
         
         return {
             "stream": "success",
@@ -98,7 +97,7 @@ class Construct_Stream_Table:
             
             # Delete entries with paths in current chunk
             self.cursor.execute("""
-                DELETE FROM stream_table.job_table
+                DELETE FROM stream_table.stream_table
                 WHERE path IN ({placeholders});
             """, chunk)
         
@@ -120,7 +119,7 @@ class Construct_Stream_Table:
             target_length = specified_stream_length[i]
             
             # Get current count for this path
-            self.cursor.execute("SELECT COUNT(*) FROM stream_table.job_table WHERE path = %s;", (path,))
+            self.cursor.execute("SELECT COUNT(*) FROM stream_table.stream_table WHERE path = %s;", (path,))
             current_count = self.cursor.fetchone()[0]
             
             # Calculate the difference
@@ -129,10 +128,10 @@ class Construct_Stream_Table:
             if diff < 0:
                 # Need to remove records (oldest first) for this path
                 self.cursor.execute("""
-                    DELETE FROM stream_table.job_table
+                    DELETE FROM stream_table.stream_table
                     WHERE path = %s AND recorded_at IN (
                         SELECT recorded_at 
-                        FROM stream_table.job_table 
+                        FROM stream_table.stream_table 
                         WHERE path = %s
                         ORDER BY recorded_at ASC 
                         LIMIT %s
@@ -143,8 +142,8 @@ class Construct_Stream_Table:
                 # Need to add records for this path
                 for _ in range(diff):
                     self.cursor.execute("""
-                        INSERT INTO stream_table.job_table (path, recorded_at, data, valid)
-                        VALUES (%s, CURRENT_TIMESTAMP, NULL, FALSE);
+                        INSERT INTO stream_table.stream_table (path, recorded_at, data)
+                        VALUES (%s, CURRENT_TIMESTAMP, '{}');
                     """, (path,))
         
         # Commit all changes at once
@@ -163,15 +162,18 @@ class Construct_Stream_Table:
             SELECT DISTINCT path::text FROM stream_table.stream_table; 
         """)
         unique_stream_paths = [row[0] for row in self.cursor.fetchall()]
-        
+        print(f"unique_stream_paths: {unique_stream_paths}")
         # Get specified paths (paths with label "KB_stream_FIELD") from knowledge_table
         self.cursor.execute("""
             SELECT path, label, name,properties FROM knowledge_base.knowledge_base 
-            WHERE label = 'KB_stream_FIELD';
+            WHERE label = 'KB_STREAM_FIELD';
         """ )
         specified_stream_data = self.cursor.fetchall()
+        print(f"specified_stream_data: {specified_stream_data}")
         specified_stream_paths = [row[0] for row in specified_stream_data]
         specified_stream_length = [row[3]['stream_length'] for row in specified_stream_data]
+        print(f"specified_stream_paths: {specified_stream_paths}")
+        print(f"specified_stream_length: {specified_stream_length}")
         invalid_stream_paths = [path for path in unique_stream_paths if path not in specified_stream_paths]
         missing_stream_paths = [path for path in specified_stream_paths if path not in unique_stream_paths]
  
