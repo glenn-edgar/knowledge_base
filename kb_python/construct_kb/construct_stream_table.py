@@ -33,7 +33,7 @@ class Construct_Stream_Table:
             CREATE TABLE IF NOT EXISTS stream_table.stream_table(
                 id SERIAL PRIMARY KEY,
                 path LTREE,
-                recorded_at TIMESTAMP DEFAULT NOW(),
+                recorded_at TIMESTAMPTZ DEFAULT NOW(),
                 data JSON
               
             );

@@ -34,9 +34,9 @@ class Construct_Job_Table:
             CREATE TABLE  IF NOT EXISTS job_table.job_table(
                 id SERIAL PRIMARY KEY,
                 path LTREE ,
-                schedule_at TIMESTAMP DEFAULT NOW(),
-                started_at TIMESTAMP DEFAULT NOW(),
-                completed_at TIMESTAMP DEFAULT NOW(),
+                schedule_at TIMESTAMPTZ DEFAULT NOW(),
+                started_at TIMESTAMPTZ DEFAULT NOW(),
+                completed_at TIMESTAMPTZ DEFAULT NOW(),
                 is_active BOOLEAN DEFAULT FALSE,
                 valid BOOLEAN DEFAULT FALSE,
                 data JSON

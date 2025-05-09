@@ -2,6 +2,7 @@ import psycopg2
 import json
 from psycopg2 import sql
 from psycopg2.extensions import adapt
+import uuid
 
 class Construct_RPC_Server_Table:
     """
@@ -30,27 +31,48 @@ class Construct_RPC_Server_Table:
         # Create the knowledge_base table
         create_table_script = sql.SQL("""
             CREATE SCHEMA IF NOT EXISTS rpc_server_table;
-            CREATE TABLE IF NOT EXISTS rpc_server_table.rpc_server_table(
-                path LTREE,
-                posted_at TIMESTAMP DEFAULT NOW(),
-                started_at TIMESTAMP DEFAULT NOW(),
-                completed_at TIMESTAMP DEFAULT NOW(),
-                data JSON,
-                valid BOOLEAN DEFAULT FALSE
+            CREATE TABLE  IF NOT EXISTS rpc_server_table.rpc_server_table (
+                id SERIAL PRIMARY KEY,
+                
+                -- The RPC client identifier
+                client_path ltree NOT NULL,
+                server_path ltree NOT NULL,
+                
+                -- Request information
+                request_id UUID NOT NULL DEFAULT gen_random_uuid(),
+                request_payload JSONB NOT NULL,
+                request_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- UTC timestamp
+                is_new_result BOOLEAN NOT NULL DEFAULT FALSE,
+                -- Tag to prevent duplicate transactions
+                transaction_tag TEXT NOT NULL,
+                
+                -- Status tracking
+                status TEXT NOT NULL DEFAULT 'completed' 
+                    CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+                
+                -- Additional useful fields
+                priority INTEGER NOT NULL DEFAULT 0,
+                
+                -- New fields as requested
+                completed_timestamp TIMESTAMPTZ,
+                rpc_client_queue ltree DEFAULT NULL,
+                
+                -- Constraints
+                CONSTRAINT unique_transaction_tag UNIQUE (client_path, transaction_tag)
             );
         """)
         self.cursor.execute(create_table_script)
         self.conn.commit()  # Commit the changes
         print("rpc_server table created.")
 
-    def add_rpc_server_field(self, rpc_server_key, rpc_server_length,info_data  ):
+    def add_rpc_server_field(self, rpc_server_key,queue_depth, description):
         """
         Add a new status field to the knowledge base
         
         Args:
             rpc_server_key (str): The key/name of the status field
-            rpc_server_length (int): The length of the rpc_server
-          
+            queue_depth (int): The length of the rpc_server
+            description (str): The description of the rpc_server
             
         Raises:
             TypeError: If status_key is not a string or properties is not a dictionary
@@ -58,132 +80,239 @@ class Construct_RPC_Server_Table:
         if not isinstance(rpc_server_key, str):
             raise TypeError("rpc_server_key must be a string")
         
-        if not isinstance(rpc_server_length, int):
-            raise TypeError("rpc_server_length must be an integer")
-        properties = {'rpc_server_length': rpc_server_length}
-        properties_json = json.dumps(properties)
+        if not isinstance(queue_depth, int):
+            raise TypeError("queue_depth must be an integer")
+        if not isinstance(description, str):
+            raise TypeError("description must be a string")
+        properties = {'queue_depth': queue_depth}
+ 
        
-        data_json = json.dumps(info_data)
+        data_json = json.dumps({})
         
         # Add the node to the knowledge base
-        self.construct_kb.add_info_node("KB_RPC_SERVER_FIELD", rpc_server_key, properties_json, data_json)
-        
-        print(f"Added rpc_server field '{rpc_server_key}' with properties: {properties_json} and data: {data_json}")
+        self.construct_kb.add_info_node("KB_RPC_SERVER_FIELD", rpc_server_key, properties, data_json,description)
+
+        print(f"Added rpc_server field '{rpc_server_key}' with properties: {properties} and data: {data_json}")
         
         return {
             "status": "success",
             "message": f"RPC server field '{rpc_server_key}' added successfully",
             "properties": properties,
-            "data": info_data
+            "data": description
         }
         
-        
-    def _remove_invalid_rpc_server_fields(self, invalid_rpc_server_paths, chunk_size=500):
+            
+    def remove_unspecified_entries(self, specified_client_paths):
         """
-        Removes all database entries with paths that match any in the invalid_rpc_server_paths array.
-        Processes the deletion in chunks to avoid SQL statement limitations.
+        Remove entries from rpc_client_table where the client_path is not in the specified list,
+        handling large lists of paths efficiently.
         
         Args:
-            invalid_rpc_server_paths (list): Array of LTREE paths that should be removed from the database
-            chunk_size (int): Maximum number of paths to process in a single query
+            specified_client_paths (list): List of valid server_paths to keep
+            
+        Returns:
+            int: Number of deleted records
         """
-        if not invalid_rpc_server_paths:
-            return  # Nothing to do if array is empty
-        
-        # Process in chunks to avoid SQL limitations
-        for i in range(0, len(invalid_rpc_server_paths), chunk_size):
-            # Get current chunk
-            chunk = invalid_rpc_server_paths[i:i + chunk_size]
+        try:
+            if not specified_client_paths:
+                print("Warning: No client paths specified. No entries will be removed.")
+                return 0
             
-            # Construct placeholders for SQL IN clause
-            placeholders = ','.join(['%s'] * len(chunk))
+            # Convert paths list to a string format suitable for PostgreSQL ANY operation
+            paths_str = ", ".join([f"'{path}'" for path in specified_client_paths])
             
-            # Delete entries with paths in current chunk
-            self.cursor.execute(f"""
+            # Set is_new_result to FALSE for remaining records before deleting unspecified ones
+            update_query = f"""
+                UPDATE rpc_server_table.rpc_server_table
+                SET is_new_result = FALSE
+                WHERE client_path::text IN ({paths_str})
+            """
+            self.cursor.execute(update_query)
+            
+            # Use parameterized query for better security and handling of large lists
+            delete_query = f"""
                 DELETE FROM rpc_server_table.rpc_server_table
-                WHERE path IN ({placeholders});
-            """, chunk)
-        
-        # Commit after all chunks are processed
-        self.conn.commit()
-        
-    def _manage_rpc_server_table(self, specified_rpc_server_paths, specified_rpc_server_length):
+                WHERE client_path::text NOT IN ({paths_str})
+            """
+            
+            self.cursor.execute(delete_query)
+            deleted_count = self.cursor.rowcount
+            
+            print(f"Removed {deleted_count} unspecified entries from rpc_server_table")
+            return deleted_count
+            
+        except Exception as e:
+            print(f"Error in remove_unspecified_entries: {e}")
+            # Consider transaction rollback if necessary
+            if hasattr(self, 'conn') and self.conn:
+                self.conn.rollback()
+            raise Exception(f"Error in remove_unspecified_entries: {e}")
+
+    def adjust_queue_length(self, specified_client_paths, specified_queue_lengths):
         """
-        Manages the number of records in server_table.job_table to match specified server lengths for each path.
-        Removes older records first if necessary and adds new ones with None for JSON data.
+        Adjust the number of records for multiple client paths to match their specified queue lengths.
         
         Args:
-            specified_server_paths (list): Array of valid LTREE paths
-            specified_server_length (list): Array of corresponding lengths for each path
+            specified_server_paths (list): List of client paths to adjust
+            specified_queue_lengths (list): List of desired queue lengths corresponding to each client path
+            
+        Returns:
+            dict: A dictionary with client paths as keys and operation results as values
         """
-        # Iterate through the arrays of paths and lengths
-        for i in range(len(specified_rpc_server_paths)):
-            path = specified_rpc_server_paths[i]
-            target_length = specified_rpc_server_length[i]
-            
-            # Get current count for this path
-            self.cursor.execute("SELECT COUNT(*) FROM rpc_server_table.rpc_server_table WHERE path = %s;", (path,))
-            current_count = self.cursor.fetchone()[0]
-            
-            # Calculate the difference
-            diff = target_length - current_count
-            
-            if diff < 0:
-                # Need to remove records (oldest first) for this path
-                self.cursor.execute("""
-                    DELETE FROM rpc_server_table.rpc_server_table
-                    WHERE path = %s AND posted_at IN (
-                        SELECT posted_at 
-                        FROM rpc_server_table.rpc_server_table 
-                        WHERE path = %s
-                        ORDER BY posted_at ASC 
-                        LIMIT %s
-                    );
-                """, (path, path, abs(diff)))
+        results = {}
+        
+        try:
+            if len(specified_client_paths) != len(specified_queue_lengths):
+                raise ValueError("Mismatch between paths and lengths lists")
                 
-            elif diff > 0:
-                # Need to add records for this path
-                for _ in range(diff):
+            for i, client_path in enumerate(specified_client_paths):
+                try:
+                    target_length = int(specified_queue_lengths[i])
+                    
+                    # Get current count
                     self.cursor.execute("""
-                        INSERT INTO rpc_server_table.rpc_server_table (path, posted_at, started_at, completed_at, data, valid)
-                        VALUES (%s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, FALSE);
-                    """, (path,))
+                        SELECT COUNT(*) FROM rpc_server_table.rpc_server_table 
+                        WHERE client_path::text = %s
+                    """, (client_path,))
+                    
+                    current_count = self.cursor.fetchone()[0]
+                    
+                    # Set is_new_result to FALSE for all records with this client_path
+                    self.cursor.execute("""
+                        UPDATE rpc_server_table.rpc_server_table
+                        SET is_new_result = FALSE
+                        WHERE client_path::text = %s
+                    """, (client_path,))
+                    
+                    if current_count > target_length:
+                        # Need to remove excess records - remove oldest first
+                        self.cursor.execute("""
+                            DELETE FROM rpc_server_table.rpc_server_table
+                            WHERE id IN (
+                                SELECT id FROM rpc_server_table.rpc_server_table
+                                WHERE client_path::text = %s
+                                ORDER BY request_timestamp ASC
+                                LIMIT %s
+                            )
+                        """, (client_path, current_count - target_length))
+                        
+                        results[client_path] = {
+                            'action': 'removed',
+                            'count': current_count - target_length,
+                            'new_total': target_length
+                        }
+                        
+                    elif current_count < target_length:
+                        # Need to add placeholder records
+                        records_to_add = target_length - current_count
+                        
+                        for _ in range(records_to_add):
+                            self.cursor.execute("""
+                                INSERT INTO rpc_server_table.rpc_server_table (
+                                    client_path, server_path, request_payload, transaction_tag, is_new_result
+                                ) VALUES (
+                                    %s, %s, %s, %s, FALSE
+                                )
+                            """, (
+                                client_path, 
+                                client_path,  # Use client_path as server_path for placeholders
+                                '{}',         # Empty JSON object
+                                f"placeholder_{uuid.uuid4()}"  # Unique transaction tag
+                            ))
+                        
+                        results[client_path] = {
+                            'action': 'added',
+                            'count': records_to_add,
+                            'new_total': target_length
+                        }
+                        
+                    else:
+                        results[client_path] = {
+                            'action': 'unchanged',
+                            'count': 0,
+                            'new_total': current_count
+                        }
+                        
+                except Exception as path_error:
+                    print(f"Error adjusting queue for path {client_path}: {path_error}")
+                    results[client_path] = {'error': str(path_error)}
+                    
+            return results
+            
+        except Exception as e:
+            print(f"Error in adjust_queue_length: {e}")
+            if hasattr(self, 'conn') and self.conn:
+                self.conn.rollback()
+            raise Exception(f"Error in adjust_queue_length: {e}")
+
+    def restore_default_values(self):
+        """
+        Restore default values for all fields in rpc_server_table except for server_path.
         
-        # Commit all changes at once
-        self.conn.commit()
+        This method will:
+        1. Generate a unique UUID for request_id for each record
+        2. Set client_path to match server_path
+        3. Set request_payload to an empty JSON object
+        4. Set request_timestamp to current time
+        5. Set is_new_result to False
+        6. Set status to 'pending'
+        7. Clear completed_timestamp (set to NULL)
+        8. Generate a new transaction_tag
+        
+        Returns:
+            int: Number of records updated
+        """
+        try:
+            # Updated to match the new table structure
+            update_query = """
+                UPDATE rpc_server_table.rpc_server_table
+                SET 
+                    request_id = gen_random_uuid(),
+                    client_path = server_path,
+                    request_payload = '{}',
+                    request_timestamp = NOW(),
+                    status = 'pending',
+                    completed_timestamp = NULL,
+                    is_new_result = FALSE,
+                    transaction_tag = CONCAT('reset_', gen_random_uuid()::text)
+            """
+            
+            self.cursor.execute(update_query)
+            updated_count = self.cursor.rowcount
+            
+            print(f"Restored default values for {updated_count} records")
+            return updated_count
+            
+        except Exception as e:
+            print(f"Error in restore_default_values: {e}")
+            if hasattr(self, 'conn') and self.conn:
+                self.conn.rollback()
+            raise Exception(f"Error in restore_default_values: {e}")
         
         
+    
     def check_installation(self):     
-        """
-        Synchronize the knowledge_base and rpc_server_table based on paths.
-        - Remove entries from status_table that don't exist in knowledge_base with label "KB_STATUS_FIELD"
-        - Add entries to status_table for paths in knowledge_base that don't exist in status_table
-        """
-        
-        # Get all paths from status_table
-        self.cursor.execute("""
-            SELECT DISTINCT path::text FROM rpc_server_table.rpc_server_table;
-        """)
-        unique_rpc_server_paths = [row[0] for row in self.cursor.fetchall()]
+ 
+    
         
         # Get specified paths (paths with label "KB_RPC_SERVER_FIELD") from knowledge_table
         self.cursor.execute("""
-            SELECT path, label, name,properties FROM knowledge_base.knowledge_base 
+            SELECT * FROM knowledge_base.knowledge_base 
             WHERE label = 'KB_RPC_SERVER_FIELD';
         """)
-        specified_rpc_server_data = self.cursor.fetchall()
-        specified_rpc_server_paths = [row[0] for row in specified_rpc_server_data]
-       
-   
-     # Extract rpc_server_length values from specified data
-        specified_rpc_server_length = []
-        for row in specified_rpc_server_data:
-            properties_json = row[3]
-            properties = json.loads(properties_json)
-            length = properties['rpc_server_length']
-            specified_rpc_server_length.append(length)
-
-        invalid_rpc_server_paths = [path for path in unique_rpc_server_paths if path not in specified_rpc_server_paths]
-        missing_rpc_server_paths = [path for path in specified_rpc_server_paths if path not in unique_rpc_server_paths]
-        self._remove_invalid_rpc_server_fields(invalid_rpc_server_paths)
-        self._manage_rpc_server_table(specified_rpc_server_paths,specified_rpc_server_length)
+        
+        specified_paths_data = self.cursor.fetchall()
+        
+        paths = []
+        lengths = []
+        for row in specified_paths_data:
+            paths.append(row[5])
+            properties = row[3]
+            lengths.append(properties['queue_depth'])
+        print(f"paths: {paths}",f"lengths: {lengths}")
+  
+        self.remove_unspecified_entries(paths)
+        self.adjust_queue_length(paths,lengths)
+        self.restore_default_values()
+    
+    
