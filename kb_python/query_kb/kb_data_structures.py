@@ -53,7 +53,7 @@ class KB_Data_Structures:
         self.rpc_client = KB_RPC_Client(self.query_support)
         self.find_rpc_client_ids = self.rpc_client.find_rpc_client_ids
         self.find_rpc_client_id = self.rpc_client.find_rpc_client_id
-        self.find_rpc_client_table_keys = self.rpc_client.find_rpc_client_table_keys
+        self.find_rpc_client_keys = self.rpc_client.find_rpc_client_keys
         
         self.rpc_server = KB_RPC_Server(self.query_support)
         self.find_rpc_server_ids = self.rpc_server.find_rpc_server_ids
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     node_ids = kb_data_structures.find_rpc_client_ids(node_name = None, properties = None, node_path = None)
     print("rpc_client_node_ids",node_ids)
     #stream_table_keys = kb_data_structures.find_stream_table_keys(node_ids)
-    client_keys = kb_data_structures.find_rpc_client_table_keys(node_ids)
+    client_keys = kb_data_structures.find_rpc_client_keys(node_ids)
     print("client_keys",client_keys)
     client_descriptions = kb_data_structures.find_description_paths(client_keys)
     print("client_descriptions",client_descriptions)
@@ -196,6 +196,12 @@ if __name__ == "__main__":
     print("server_keys",server_keys)    
     server_descriptions = kb_data_structures.find_description_paths(server_keys)
     print("server_descriptions",server_descriptions)    
+    
+    
+    
+    
+    
+    
     
     
     kb_data_structures.query_support.disconnect()

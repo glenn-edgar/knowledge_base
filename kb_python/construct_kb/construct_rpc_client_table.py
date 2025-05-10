@@ -41,6 +41,9 @@ class Construct_RPC_Client_Table:
                 server_path ltree NOT NULL,
                 
                 -- Response information
+                transaction_tag TEXT NOT NULL DEFAULT 'none',
+                rpc_action TEXT NOT NULL DEFAULT 'none',
+                response_rpc_action TEXT NOT NULL DEFAULT 'none',
                 response_payload JSONB NOT NULL,
                 response_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- UTC timestamp
                 

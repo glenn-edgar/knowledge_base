@@ -34,12 +34,12 @@ class Construct_RPC_Server_Table:
             CREATE TABLE  IF NOT EXISTS rpc_server_table.rpc_server_table (
                 id SERIAL PRIMARY KEY,
                 
-                -- The RPC client identifier
-                client_path ltree NOT NULL,
+              
                 server_path ltree NOT NULL,
                 
                 -- Request information
                 request_id UUID NOT NULL DEFAULT gen_random_uuid(),
+                rpc_action TEXT NOT NULL DEFAULT 'none',
                 request_payload JSONB NOT NULL,
                 request_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- UTC timestamp
                 is_new_result BOOLEAN NOT NULL DEFAULT FALSE,
@@ -47,7 +47,7 @@ class Construct_RPC_Server_Table:
                 transaction_tag TEXT NOT NULL,
                 
                 -- Status tracking
-                status TEXT NOT NULL DEFAULT 'completed' 
+                status TEXT NOT NULL DEFAULT 'completed'  
                     CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
                 
                 -- Additional useful fields
@@ -55,12 +55,13 @@ class Construct_RPC_Server_Table:
                 
                 -- New fields as requested
                 completed_timestamp TIMESTAMPTZ,
-                rpc_client_queue ltree DEFAULT NULL,
+                rpc_client_queue ltree DEFAULT NULL
                 
-                -- Constraints
-                CONSTRAINT unique_transaction_tag UNIQUE (client_path, transaction_tag)
+               
             );
         """)
+
+
         self.cursor.execute(create_table_script)
         self.conn.commit()  # Commit the changes
         print("rpc_server table created.")
@@ -102,37 +103,37 @@ class Construct_RPC_Server_Table:
         }
         
             
-    def remove_unspecified_entries(self, specified_client_paths):
+    def remove_unspecified_entries(self, specified_server_paths):
         """
-        Remove entries from rpc_client_table where the client_path is not in the specified list,
+        Remove entries from rpc_server_table where the server_path is not in the specified list,
         handling large lists of paths efficiently.
         
         Args:
-            specified_client_paths (list): List of valid server_paths to keep
+            specified_server_paths (list): List of valid server_paths to keep
             
         Returns:
             int: Number of deleted records
         """
         try:
-            if not specified_client_paths:
-                print("Warning: No client paths specified. No entries will be removed.")
+            if not specified_server_paths:
+                print("Warning: No server_paths specified. No entries will be removed.")
                 return 0
             
             # Convert paths list to a string format suitable for PostgreSQL ANY operation
-            paths_str = ", ".join([f"'{path}'" for path in specified_client_paths])
+            paths_str = ", ".join([f"'{path}'" for path in specified_server_paths])
             
             # Set is_new_result to FALSE for remaining records before deleting unspecified ones
             update_query = f"""
                 UPDATE rpc_server_table.rpc_server_table
                 SET is_new_result = FALSE
-                WHERE client_path::text IN ({paths_str})
+                WHERE server_path ::text IN ({paths_str})
             """
             self.cursor.execute(update_query)
             
             # Use parameterized query for better security and handling of large lists
             delete_query = f"""
                 DELETE FROM rpc_server_table.rpc_server_table
-                WHERE client_path::text NOT IN ({paths_str})
+                WHERE server_path::text NOT IN ({paths_str})
             """
             
             self.cursor.execute(delete_query)
@@ -148,7 +149,7 @@ class Construct_RPC_Server_Table:
                 self.conn.rollback()
             raise Exception(f"Error in remove_unspecified_entries: {e}")
 
-    def adjust_queue_length(self, specified_client_paths, specified_queue_lengths):
+    def adjust_queue_length(self, specified_server_paths, specified_queue_lengths):
         """
         Adjust the number of records for multiple client paths to match their specified queue lengths.
         
@@ -162,27 +163,27 @@ class Construct_RPC_Server_Table:
         results = {}
         
         try:
-            if len(specified_client_paths) != len(specified_queue_lengths):
+            if len(specified_server_paths) != len(specified_queue_lengths):
                 raise ValueError("Mismatch between paths and lengths lists")
                 
-            for i, client_path in enumerate(specified_client_paths):
+            for i, server_path in enumerate(specified_server_paths):
                 try:
                     target_length = int(specified_queue_lengths[i])
                     
                     # Get current count
                     self.cursor.execute("""
                         SELECT COUNT(*) FROM rpc_server_table.rpc_server_table 
-                        WHERE client_path::text = %s
-                    """, (client_path,))
+                        WHERE server_path::text = %s
+                    """, (server_path,))
                     
                     current_count = self.cursor.fetchone()[0]
                     
-                    # Set is_new_result to FALSE for all records with this client_path
+                    # Set is_new_result to FALSE for all records with this server_path
                     self.cursor.execute("""
                         UPDATE rpc_server_table.rpc_server_table
                         SET is_new_result = FALSE
-                        WHERE client_path::text = %s
-                    """, (client_path,))
+                        WHERE server_path::text = %s
+                    """, (server_path,))
                     
                     if current_count > target_length:
                         # Need to remove excess records - remove oldest first
@@ -190,13 +191,13 @@ class Construct_RPC_Server_Table:
                             DELETE FROM rpc_server_table.rpc_server_table
                             WHERE id IN (
                                 SELECT id FROM rpc_server_table.rpc_server_table
-                                WHERE client_path::text = %s
+                                WHERE server_path::text = %s
                                 ORDER BY request_timestamp ASC
                                 LIMIT %s
                             )
-                        """, (client_path, current_count - target_length))
+                        """, (server_path, current_count - target_length))
                         
-                        results[client_path] = {
+                        results[server_path] = {
                             'action': 'removed',
                             'count': current_count - target_length,
                             'new_total': target_length
@@ -209,33 +210,33 @@ class Construct_RPC_Server_Table:
                         for _ in range(records_to_add):
                             self.cursor.execute("""
                                 INSERT INTO rpc_server_table.rpc_server_table (
-                                    client_path, server_path, request_payload, transaction_tag, is_new_result
+                                    server_path, request_payload, transaction_tag, is_new_result
                                 ) VALUES (
-                                    %s, %s, %s, %s, FALSE
+                                     %s, %s, %s, FALSE
                                 )
                             """, (
-                                client_path, 
-                                client_path,  # Use client_path as server_path for placeholders
+                                 
+                                server_path,  # Use server_path as server_path for placeholders
                                 '{}',         # Empty JSON object
                                 f"placeholder_{uuid.uuid4()}"  # Unique transaction tag
                             ))
                         
-                        results[client_path] = {
+                        results[server_path] = {
                             'action': 'added',
                             'count': records_to_add,
                             'new_total': target_length
                         }
                         
                     else:
-                        results[client_path] = {
+                        results[server_path] = {
                             'action': 'unchanged',
                             'count': 0,
                             'new_total': current_count
                         }
                         
                 except Exception as path_error:
-                    print(f"Error adjusting queue for path {client_path}: {path_error}")
-                    results[client_path] = {'error': str(path_error)}
+                    print(f"Error adjusting queue for path {server_path}: {path_error}")
+                    results[server_path] = {'error': str(path_error)}
                     
             return results
             
@@ -251,7 +252,7 @@ class Construct_RPC_Server_Table:
         
         This method will:
         1. Generate a unique UUID for request_id for each record
-        2. Set client_path to match server_path
+        2. Set server_path to match server_path
         3. Set request_payload to an empty JSON object
         4. Set request_timestamp to current time
         5. Set is_new_result to False
@@ -268,7 +269,6 @@ class Construct_RPC_Server_Table:
                 UPDATE rpc_server_table.rpc_server_table
                 SET 
                     request_id = gen_random_uuid(),
-                    client_path = server_path,
                     request_payload = '{}',
                     request_timestamp = NOW(),
                     status = 'pending',
