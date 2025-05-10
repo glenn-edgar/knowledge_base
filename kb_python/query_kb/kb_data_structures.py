@@ -5,6 +5,8 @@ from kb_query_support import KB_Search
 from kb_status_data import KB_Status_Data
 from kb_job_table import KB_Job_Queue
 from kb_stream import KB_Stream
+from kb_rpc_client import KB_RPC_Client
+from kb_rpc_server import KB_RPC_Server
 class KB_Data_Structures:
     """
     A class to handle the data structures for the knowledge base.
@@ -47,6 +49,16 @@ class KB_Data_Structures:
         self.find_stream_table_keys = self.stream.find_stream_table_keys
         self.push_stream_data = self.stream.push_stream_data
         self.list_stream_data = self.stream.list_stream_data
+        
+        self.rpc_client = KB_RPC_Client(self.query_support)
+        self.find_rpc_client_ids = self.rpc_client.find_rpc_client_ids
+        self.find_rpc_client_id = self.rpc_client.find_rpc_client_id
+        self.find_rpc_client_table_keys = self.rpc_client.find_rpc_client_table_keys
+        
+        self.rpc_server = KB_RPC_Server(self.query_support)
+        self.find_rpc_server_ids = self.rpc_server.find_rpc_server_ids
+        self.find_rpc_server_id = self.rpc_server.find_rpc_server_id
+        self.find_rpc_server_table_keys = self.rpc_server.find_rpc_table_keys
         
  # Example usage:
 if __name__ == "__main__":
@@ -162,5 +174,28 @@ if __name__ == "__main__":
     print("past_timestamp",past_timestamp)
     print("past data")
     print("list_stream_data",kb_data_structures.list_stream_data(stream_table_keys[0], recorded_after=past_timestamp, recorded_before=before_timestamp))
+    
+    """
+    RPC Functions
+    """
+    print("***************************  RPC Functions ***************************")
+    
+    node_ids = kb_data_structures.find_rpc_client_ids(node_name = None, properties = None, node_path = None)
+    print("rpc_client_node_ids",node_ids)
+    #stream_table_keys = kb_data_structures.find_stream_table_keys(node_ids)
+    client_keys = kb_data_structures.find_rpc_client_table_keys(node_ids)
+    print("client_keys",client_keys)
+    client_descriptions = kb_data_structures.find_description_paths(client_keys)
+    print("client_descriptions",client_descriptions)
+    
+    
+    
+    node_ids = kb_data_structures.find_rpc_server_ids(node_name = None, properties = None, node_path = None)
+    print("rpc_server_node_ids",node_ids)   
+    server_keys = kb_data_structures.find_rpc_server_table_keys(node_ids)
+    print("server_keys",server_keys)    
+    server_descriptions = kb_data_structures.find_description_paths(server_keys)
+    print("server_descriptions",server_descriptions)    
+    
     
     kb_data_structures.query_support.disconnect()
