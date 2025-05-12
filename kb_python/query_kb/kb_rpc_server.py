@@ -15,13 +15,14 @@ class KB_RPC_Server:
         self.kb_search = kb_search
         self.conn = self.kb_search.conn
         self.cursor = self.kb_search.cursor 
+ 
     
     def find_rpc_server_id(self, node_name, properties, node_path):
         """
         Find the node id for a given node name, properties, node path, and data.
         """
         print(node_name, properties, node_path)
-        result = self.find_node_ids(node_name, properties, node_path)
+        result = self.find_rpc_server_ids(node_name, properties, node_path)
         if len(result) == 0:
             raise ValueError(f"No node found matching path parameters: {node_name}, {properties}, {node_path}")
         if len(result) > 1:
@@ -50,7 +51,7 @@ class KB_RPC_Server:
             raise ValueError(f"No node found matching path parameters: {node_name}, {properties}, {node_path}")
         return node_ids
     
-    def find_rpc_table_keys(self, key_data):
+    def find_rpc_server_table_keys(self, key_data):
        
             
         return_values = []
@@ -105,52 +106,6 @@ class KB_RPC_Server:
             traceback.print_exc()
             raise  # Reraise the exception after printing it
         
-    def list_completed_jobs(self, server_path):
-        """
-        List records in the table where server_path matches and status is 'completed'.
-        
-        Args:
-            server_path (str): The server path to match against.
-            
-        Returns:
-            list: A list of records that match the criteria.
-            
-        Raises:
-            Exception: Reraises any exception that occurs during database operations.
-        """
-        try:
-            query = """
-                SELECT *
-                FROM rpc_server_table.rpc_server_table
-                WHERE server_path = %s
-                AND status = 'completed'
-                ORDER BY priority DESC, request_timestamp ASC
-            """
-            
-            # Convert server_path to ltree format if it's not already
-            # This assumes server_path is provided as a string like 'path.to.server'
-            formatted_server_path = server_path
-            
-            # Execute the query
-            formatted_results = []
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, (formatted_server_path,))
-                results = cursor.fetchall()
-                
-                # Format results by creating dictionaries using column names
-                column_names = [desc[0] for desc in cursor.description]
-                for row in results:
-                    row_dict = dict(zip(column_names, row))
-                    formatted_results.append(row_dict)
-                    
-            return formatted_results
-        
-        except Exception as e:
-            print(f"Exception in list_completed_jobs: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise  # Reraise the exception after printing it
-        
     def list_failed_jobs(self, server_path=None):
         """
         List records in the table where status is 'failed' and optionally filtered by server_path.
@@ -199,49 +154,6 @@ class KB_RPC_Server:
         
         except Exception as e:
             print(f"Exception in list_failed_jobs: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise  # Reraise the exception after printing it
-        
-        
-    def list_pending_jobs(self, server_path):
-        """
-        List records in the table where server_path matches and status is 'pending'.
-        
-        Args:
-            server_path (str): The server path to match against.
-            
-        Returns:
-            list: A list of records that match the criteria.
-            
-        Raises:
-            Exception: Reraises any exception that occurs during database operations.
-        """
-        try:
-            query = """
-                SELECT *
-                FROM rpc_server_table.rpc_server_table
-                WHERE server_path = %s
-                AND status = 'pending'
-                ORDER BY priority DESC, request_timestamp ASC
-            """
-            
-            # Execute the query
-            formatted_results = []
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, (server_path,))
-                results = cursor.fetchall()
-                
-                # Format results by creating dictionaries using column names
-                column_names = [desc[0] for desc in cursor.description]
-                for row in results:
-                    row_dict = dict(zip(column_names, row))
-                    formatted_results.append(row_dict)
-                    
-            return formatted_results
-        
-        except Exception as e:
-            print(f"Exception in list_pending_jobs: {str(e)}")
             import traceback
             traceback.print_exc()
             raise  # Reraise the exception after printing it

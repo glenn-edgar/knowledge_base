@@ -1,7 +1,11 @@
+import time
 import json
-import datetime
+import logging
 import uuid
 from datetime import datetime, timezone
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
 class KB_RPC_Client:
     """
     A class to handle the RPC client for the knowledge base.
@@ -15,7 +19,7 @@ class KB_RPC_Client:
         """
         Find the node id for a given node name, properties, node path, and data.
         """
-        print(node_name, properties, node_path)
+      
         result = self.find_node_ids(node_name, properties, node_path)
         if len(result) == 0:
             raise ValueError(f"No node found matching path parameters: {node_name}, {properties}, {node_path}")
@@ -25,9 +29,9 @@ class KB_RPC_Client:
     
     def find_rpc_client_ids(self, node_name, properties, node_path):
         """
-        Find the node id for a given node name, properties, node path :
+        Find the node id for a given node name, properties, node path.
         """
-        print(node_name, properties, node_path)
+       
         self.kb_search.clear_filters()
         self.kb_search.search_label("KB_RPC_CLIENT_FIELD")
         if node_name is not None:
@@ -46,11 +50,11 @@ class KB_RPC_Client:
         return node_ids
     
     def find_rpc_client_keys(self, key_data):
-       
-            
+        """
+        Extract key values from key_data.
+        """
         return_values = []
         for key in key_data:
-            
             return_values.append(key[5])
         return return_values    
     
@@ -68,36 +72,36 @@ class KB_RPC_Client:
             Exception: If no records exist for the specified client_path
         """
         try:
-            # First, verify that there are records with the given client_path
-            self.cursor.execute("""
-                SELECT COUNT(*) 
-                FROM rpc_client_table.rpc_client_table 
-                WHERE client_path = %s
-            """, (client_path,))
-            
-            total_records = self.cursor.fetchone()[0]
-            
-            if total_records == 0:
-                raise Exception(f"No records found for client_path: {client_path}")
-            
-            # Now, count the number of free slots (where is_new_result is FALSE)
-            self.cursor.execute("""
-                SELECT COUNT(*) 
-                FROM rpc_client_table.rpc_client_table 
-                WHERE client_path = %s AND is_new_result = FALSE
-            """, (client_path,))
-            
-            free_slots = self.cursor.fetchone()[0]
-            
-            return free_slots
-            
+            with self.conn.cursor() as cursor:
+                # First, verify that there are records with the given client_path
+                cursor.execute("""
+                    SELECT COUNT(*) 
+                    FROM rpc_client_table.rpc_client_table 
+                    WHERE client_path = %s
+                """, (client_path,))
+                
+                total_records = cursor.fetchone()[0]
+                
+                if total_records == 0:
+                    raise Exception(f"No records found for client_path: {client_path}")
+                
+                # Now, count the number of free slots (where is_new_result is FALSE)
+                cursor.execute("""
+                    SELECT COUNT(*) 
+                    FROM rpc_client_table.rpc_client_table 
+                    WHERE client_path = %s AND is_new_result = FALSE
+                """, (client_path,))
+                
+                free_slots = cursor.fetchone()[0]
+                
+                return free_slots
+                
         except psycopg2.Error as e:
-            # Handle database errors
             raise Exception(f"Database error when finding free slots: {str(e)}")
         
     def find_queued_slots(self, client_path):
         """
-        Find the number of queued slots (records with is_new_result=FALSE) for a given client_path.
+        Find the number of queued slots (records with is_new_result=TRUE) for a given client_path.
         
         Args:
             client_path (str): LTree compatible path for client
@@ -109,31 +113,31 @@ class KB_RPC_Client:
             Exception: If no records exist for the specified client_path
         """
         try:
-            # First, verify that there are records with the given client_path
-            self.cursor.execute("""
-                SELECT COUNT(*) 
-                FROM rpc_client_table.rpc_client_table 
-                WHERE client_path = %s
-            """, (client_path,))
-            
-            total_records = self.cursor.fetchone()[0]
-            
-            if total_records == 0:
-                raise Exception(f"No records found for client_path: {client_path}")
-            
-            # Count the number of queued slots (where is_new_result is FALSE)
-            self.cursor.execute("""
-                SELECT COUNT(*) 
-                FROM rpc_client_table.rpc_client_table 
-                WHERE client_path = %s AND is_new_result = TRUE
-            """, (client_path,))
-            
-            queued_slots = self.cursor.fetchone()[0]
-            
-            return queued_slots
-            
+            with self.conn.cursor() as cursor:
+                # First, verify that there are records with the given client_path
+                cursor.execute("""
+                    SELECT COUNT(*) 
+                    FROM rpc_client_table.rpc_client_table 
+                    WHERE client_path = %s
+                """, (client_path,))
+                
+                total_records = cursor.fetchone()[0]
+                
+                if total_records == 0:
+                    raise Exception(f"No records found for client_path: {client_path}")
+                
+                # Count the number of queued slots (where is_new_result is TRUE)
+                cursor.execute("""
+                    SELECT COUNT(*) 
+                    FROM rpc_client_table.rpc_client_table 
+                    WHERE client_path = %s AND is_new_result = TRUE
+                """, (client_path,))
+                
+                queued_slots = cursor.fetchone()[0]
+                
+                return queued_slots
+                
         except psycopg2.Error as e:
-            # Handle database errors
             raise Exception(f"Database error when finding queued slots: {str(e)}")
     
     def peak_reply_data(self, client_path):
@@ -153,48 +157,39 @@ class KB_RPC_Client:
             Exception: If no records with is_new_result=TRUE are found for the client_path
         """
         try:
-            query = """
-                SELECT id, request_id, client_path, server_path, transaction_tag, rpc_action,
-                       response_payload, response_timestamp, is_new_result, error_message
-                FROM rpc_client_table.rpc_client_table
-                WHERE client_path = %s AND is_new_result = TRUE
-                ORDER BY response_timestamp ASC
-                LIMIT 1
-            """
-            
-            # Execute the query
-            self.cursor.execute(query, (client_path,))
-            
-            # Fetch the result
-            record = self.cursor.fetchone()
-            
-            # Check if a record was found
-            if record is None:
-                return None, None
-            
-            # Create a dictionary of field names and values
-            column_names = [desc[0] for desc in self.cursor.description]
-            data_dict = dict(zip(column_names, record))
-            
-            # Convert UUID to string
-            if 'request_id' in data_dict and data_dict['request_id'] is not None:
-                data_dict['request_id'] = str(data_dict['request_id'])
-            
-            # Convert datetime to ISO format string
-            if 'response_timestamp' in data_dict and isinstance(data_dict['response_timestamp'], datetime):
-                data_dict['response_timestamp'] = data_dict['response_timestamp'].isoformat()
-            
-            # Get the record ID
-            record_id = data_dict.pop('id')
-            
-            return record_id, data_dict
-            
+            with self.conn.cursor() as cursor:
+                query = """
+                    SELECT id, request_id, client_path, server_path, transaction_tag, rpc_action,
+                           response_payload, response_timestamp, is_new_result, error_message
+                    FROM rpc_client_table.rpc_client_table
+                    WHERE client_path = %s AND is_new_result = TRUE
+                    ORDER BY response_timestamp ASC
+                    LIMIT 1
+                """
+                
+                cursor.execute(query, (client_path,))
+                
+                record = cursor.fetchone()
+                
+                if record is None:
+                    return None, None
+                
+                column_names = [desc[0] for desc in cursor.description]
+                data_dict = dict(zip(column_names, record))
+                
+                if 'request_id' in data_dict and data_dict['request_id'] is not None:
+                    data_dict['request_id'] = str(data_dict['request_id'])
+                
+                if 'response_timestamp' in data_dict and isinstance(data_dict['response_timestamp'], datetime):
+                    data_dict['response_timestamp'] = data_dict['response_timestamp'].isoformat()
+                
+                record_id = data_dict.pop('id')
+                
+                return record_id, data_dict
+                
         except psycopg2.Error as e:
-            # Handle database errors
             raise Exception(f"Database error when peeking reply data: {str(e)}")
 
-
-    
     def release_rpc_data(self, client_path, id, max_retries=3, retry_delay=1):
         """
         For a given ID, verify the record matches the client_path and is_new_result is TRUE,
@@ -213,16 +208,15 @@ class KB_RPC_Client:
             Exception: If database error occurs or cannot obtain lock after retries
         """
         retries = 0
-        
+        original_autocommit = self.conn.autocommit
+        print(f"Releasing RPC data for ID: {id}")
         while retries <= max_retries:
             try:
-                # Create a new cursor for this attempt to ensure clean transaction state
+                # Ensure no open transaction before setting autocommit
+                if self.conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
+                    self.conn.rollback()
+                self.conn.autocommit = False
                 with self.conn.cursor() as transaction_cursor:
-                    # Begin a transaction
-                    self.conn.autocommit = False
-                    
-                    # First, verify the record exists with the given ID, client_path, and is_new_result=TRUE
-                    # Use NOWAIT to immediately get an error if the row is locked
                     verify_query = """
                         SELECT id
                         FROM rpc_client_table.rpc_client_table
@@ -232,13 +226,10 @@ class KB_RPC_Client:
                     
                     transaction_cursor.execute(verify_query, (id, client_path))
                     
-                    # Check if a record was found
                     if transaction_cursor.fetchone() is None:
-                        # No matching record found
                         self.conn.rollback()
                         return False
                     
-                    # Update the record
                     update_query = """
                         UPDATE rpc_client_table.rpc_client_table
                         SET is_new_result = FALSE
@@ -247,42 +238,31 @@ class KB_RPC_Client:
                     
                     transaction_cursor.execute(update_query, (id,))
                     
-                    # Commit the transaction
                     self.conn.commit()
-                    
-                    # Return success
                     return True
                     
             except psycopg2.errors.LockNotAvailable:
-                # This specific exception means another transaction has locked the row
                 self.conn.rollback()
-                
                 if retries < max_retries:
-                    # Wait before retrying
                     time.sleep(retry_delay)
                     retries += 1
                 else:
-                    # Max retries exceeded
                     raise Exception(f"Could not obtain lock on record ID {id} after {max_retries} attempts")
                     
             except psycopg2.Error as e:
-                # Handle other database errors
                 self.conn.rollback()
                 raise Exception(f"Database error when releasing RPC data: {str(e)}")
                 
             finally:
-                # Reset autocommit to its default state
-                self.conn.autocommit = True
+                self.conn.autocommit = original_autocommit
         
-        # This should not be reached due to the exception in the retry loop,
-        # but added as an extra safety measure
         raise Exception(f"Failed to release RPC data for ID {id} after {max_retries} attempts")    
 
-
-    def clear_reply_queue(self):
+    def clear_reply_queue(self, client_path, max_retries=3, retry_delay=1):
         """
-        Clear the reply queue by resetting all records in the table.
-        For each record:
+        Clear the reply queue by resetting records matching the specified client_path.
+        
+        For each matching record:
         - Sets a unique UUID for request_id
         - Sets server_path equal to client_path
         - Resets response_payload to empty JSON object
@@ -290,36 +270,72 @@ class KB_RPC_Client:
         - Sets is_new_result to FALSE
         - Clears error_message
         
+        Includes record locking with retries to handle concurrent access.
+        
+        Args:
+            client_path (str): The client path to match for clearing records
+            max_retries (int): Maximum number of retries for acquiring the lock
+            retry_delay (float): Delay in seconds between retry attempts
+        
         Returns:
             int: Number of records updated
         """
-        try:
-            # Create the update query
-            query = """
-                UPDATE rpc_client_table.rpc_client_table
-                SET request_id = gen_random_uuid(),  -- PostgreSQL function to generate unique UUIDs
-                    server_path = client_path,
-                    response_payload = '{}',
-                    response_timestamp = NOW(),  -- Current UTC timestamp
-                    is_new_result = FALSE,
-                    error_message = ''
-            """
+        retry_count = 0
+        row_count = 0
+        original_autocommit = self.conn.autocommit
+        
+        while retry_count < max_retries:
+            try:
+                # Ensure no open transaction before setting autocommit
+                if self.conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
+                    self.conn.rollback()
+                self.conn.autocommit = False
+                with self.conn.cursor() as cursor:
+                    lock_query = """
+                        SELECT 1 FROM rpc_client_table.rpc_client_table
+                        WHERE client_path = %s
+                        FOR UPDATE NOWAIT
+                    """
+                    cursor.execute(lock_query, (client_path,))
+                    
+                    update_query = """
+                        UPDATE rpc_client_table.rpc_client_table
+                        SET request_id = gen_random_uuid(),
+                            server_path = client_path,
+                            response_payload = '{}',
+                            response_timestamp = NOW(),
+                            is_new_result = FALSE,
+                            error_message = ''
+                        WHERE client_path = %s
+                    """
+                    
+                    cursor.execute(update_query, (client_path,))
+                    
+                    row_count = cursor.rowcount
+                    
+                    self.conn.commit()
+                    
+                    logging.info(f"Successfully cleared {row_count} records for client path: {client_path}")
+                    return row_count
             
-            # Execute the query
-            self.cursor.execute(query)
+            except psycopg2.errors.LockNotAvailable:
+                self.conn.rollback()
+                retry_count += 1
+                logging.warning(f"Lock contention when clearing reply queue for {client_path}. "
+                              f"Retry {retry_count}/{max_retries}")
+                
+                if retry_count < max_retries:
+                    time.sleep(retry_delay)
+                else:
+                    raise Exception(f"Failed to acquire lock after {max_retries} attempts for client path: {client_path}")
             
-            # Get the number of affected rows
-            row_count = self.cursor.rowcount
+            except psycopg2.Error as e:
+                self.conn.rollback()
+                logging.error(f"Database error while clearing reply queue: {str(e)}")
+                raise Exception(f"Failed to clear reply queue for {client_path}: {str(e)}")
             
-            # Commit the transaction
-            self.conn.commit()
-            
-            return row_count
-            
-        except psycopg2.Error as e:
-            # Rollback in case of error
-            self.conn.rollback()
-            raise Exception(f"Failed to clear reply queue: {str(e)}") 
+            finally:
+                self.conn.autocommit = original_autocommit
            
     def push_reply_data(self, client_path, request_uuid, server_path, rpc_action, transaction_tag, reply_data, error_text):
         """
@@ -337,14 +353,17 @@ class KB_RPC_Client:
         Raises:
             Exception: If no available record with is_new_result=False is found
         """
+        original_autocommit = self.conn.autocommit
         try:
-            # Convert request_uuid to UUID object if it's a string
-            if isinstance(request_uuid, str):
-                request_uuid = uuid.UUID(request_uuid)
+            if isinstance(request_uuid, uuid.UUID):
+                request_uuid = str(request_uuid)
                 
-            # Start a transaction
+            # Ensure no open transaction before setting autocommit
+            if self.conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
+                self.conn.rollback()
+                
+            self.conn.autocommit = False
             with self.conn.cursor() as cursor:
-                # Select for update to lock the row
                 cursor.execute("""
                     SELECT id 
                     FROM rpc_client_table.rpc_client_table
@@ -360,7 +379,6 @@ class KB_RPC_Client:
                 
                 record_id = result[0]
                 
-                # Update the record
                 cursor.execute("""
                     UPDATE rpc_client_table.rpc_client_table
                     SET request_id = %s,
@@ -383,7 +401,6 @@ class KB_RPC_Client:
                     record_id
                 ))
                 
-                # Commit the transaction
                 self.conn.commit()
                 
         except psycopg2.Error as e:
@@ -391,9 +408,10 @@ class KB_RPC_Client:
             if "could not obtain lock" in str(e):
                 raise Exception("Parallel operation detected, try again later")
             else:
-                raise e
-    
-    
+                raise Exception(f"Database error when pushing reply data: {str(e)}")
+                
+        finally:
+            self.conn.autocommit = original_autocommit
     
     def list_waiting_jobs(self, client_path=None):
         """
@@ -411,62 +429,51 @@ class KB_RPC_Client:
             Exception: If a database error occurs
         """
         try:
-            if client_path is None:
-                # No client_path filter, return all waiting jobs
-                query = """
-                    SELECT id, request_id, client_path, server_path, 
-                           response_payload, response_timestamp, is_new_result, error_message
-                    FROM rpc_client_table.rpc_client_table
-                    WHERE is_new_result = TRUE
-                    ORDER BY response_timestamp ASC
-                """
-                params = ()
-            else:
-                # Filter by client_path
-                query = """
-                    SELECT id, request_id, client_path, server_path, 
-                           response_payload, response_timestamp, is_new_result, error_message
-                    FROM rpc_client_table.rpc_client_table
-                    WHERE is_new_result = TRUE AND client_path = %s
-                    ORDER BY response_timestamp ASC
-                """
-                params = (client_path,)
-            
-            # Execute the query
-            self.cursor.execute(query, params)
-            
-            # Get column names from cursor description
-            column_names = [desc[0] for desc in self.cursor.description]
-            
-            # Fetch all matching records
-            records = self.cursor.fetchall()
-            
-            # Convert to list of dictionaries
-            result = []
-            for record in records:
-                # Create a dictionary for this record
-                record_dict = dict(zip(column_names, record))
+            with self.conn.cursor() as cursor:
+                if client_path is None:
+                    query = """
+                        SELECT id, request_id, client_path, server_path, 
+                               response_payload, response_timestamp, is_new_result, error_message
+                        FROM rpc_client_table.rpc_client_table
+                        WHERE is_new_result = TRUE
+                        ORDER BY response_timestamp ASC
+                    """
+                    params = ()
+                else:
+                    query = """
+                        SELECT id, request_id, client_path, server_path, 
+                               response_payload, response_timestamp, is_new_result, error_message
+                        FROM rpc_client_table.rpc_client_table
+                        WHERE is_new_result = TRUE AND client_path = %s
+                        ORDER BY response_timestamp ASC
+                    """
+                    params = (client_path,)
                 
-                # Convert UUID to string
-                if 'request_id' in record_dict and record_dict['request_id'] is not None:
-                    record_dict['request_id'] = str(record_dict['request_id'])
+                cursor.execute(query, params)
                 
-                # Convert datetime to ISO format string
-                if 'response_timestamp' in record_dict and isinstance(record_dict['response_timestamp'], datetime):
-                    record_dict['response_timestamp'] = record_dict['response_timestamp'].isoformat()
+                column_names = [desc[0] for desc in cursor.description]
                 
-                # Convert ltree to string
-                if 'client_path' in record_dict and record_dict['client_path'] is not None:
-                    record_dict['client_path'] = str(record_dict['client_path'])
+                records = cursor.fetchall()
                 
-                if 'server_path' in record_dict and record_dict['server_path'] is not None:
-                    record_dict['server_path'] = str(record_dict['server_path'])
+                result = []
+                for record in records:
+                    record_dict = dict(zip(column_names, record))
+                    
+                    if 'request_id' in record_dict and record_dict['request_id'] is not None:
+                        record_dict['request_id'] = str(record_dict['request_id'])
+                    
+                    if 'response_timestamp' in record_dict and isinstance(record_dict['response_timestamp'], datetime):
+                        record_dict['response_timestamp'] = record_dict['response_timestamp'].isoformat()
+                    
+                    if 'client_path' in record_dict and record_dict['client_path'] is not None:
+                        record_dict['client_path'] = str(record_dict['client_path'])
+                    
+                    if 'server_path' in record_dict and record_dict['server_path'] is not None:
+                        record_dict['server_path'] = str(record_dict['server_path'])
+                    
+                    result.append(record_dict)
                 
-                # Add to result list
-                result.append(record_dict)
-            
-            return result
-            
+                return result
+                
         except psycopg2.Error as e:
-            # Handle database errors
             raise Exception(f"Database error when listing waiting jobs: {str(e)}")
