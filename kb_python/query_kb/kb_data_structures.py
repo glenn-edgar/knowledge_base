@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timedelta, timezone
 import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -69,17 +69,77 @@ class KB_Data_Structures:
         self.rpc_server_id_find = self.rpc_server.find_rpc_server_id
         self.rpc_server_ids_find = self.rpc_server.find_rpc_server_ids
         self.rpc_server_table_keys_find = self.rpc_server.find_rpc_server_table_keys
-        self.rpc_server_processing_jobs_list = self.rpc_server.list_processing_jobs
-        self.rpc_server_failed_jobs_list = self.rpc_server.list_failed_jobs
-        self.rpc_server_pending_jobs_count = self.rpc_server.count_pending_jobs
-        self.rpc_server_processing_jobs_count = self.rpc_server.count_processing_jobs
-        self.rpc_server_completed_jobs_count = self.rpc_server.count_completed_jobs
-        self.rpc_server_failed_jobs_count = self.rpc_server.count_failed_jobs
-        self.rpc_server_job_counts_get = self.rpc_server.get_job_counts
-        self.rpc_server_queue_push = self.rpc_server.push_rpc_queue
-        self.rpc_server_queue_peak = self.rpc_server.peak_server_queue
+        self.rpc_server_list_jobs_job_types = self.rpc_server.list_jobs_job_types
+        self.rpc_server_count_all_jobs = self.rpc_server.count_all_jobs
+        self.rpc_server_count_empty_jobs = self.rpc_server.count_empty_jobs
+        self.rpc_server_count_new_jobs = self.rpc_server.count_new_jobs
+        self.rpc_server_count_processing_jobs = self.rpc_server.count_processing_jobs
+        
+        self.rpc_server_push_rpc_queue = self.rpc_server.push_rpc_queue
+        self.rpc_server_peak_server_queue = self.rpc_server.peak_server_queue
         self.rpc_server_job_completion_mark = self.rpc_server.mark_job_completion
-        self.rpc_server_job_failure_mark = self.rpc_server.mark_job_failure
+        self.rpc_server_clear_server_queue = self.rpc_server.clear_server_queue
+        
+
+# Example usage:
+if __name__ == "__main__":
+    # Create a new KB_Search instance
+    kb_data_structures = KB_Data_Structures(
+        dbname="knowledge_base",
+        user="gedgar",
+        password="ready2go",
+        host="localhost",
+        port="5432"
+    )   
+    
+    def test_server_functions(self, server_path):
+        print("rpc_server_path", server_path)
+        print("initial state")
+        self.rpc_server_count_all_jobs(server_path)
+        print("clear server queue")
+        self.rpc_server_clear_server_queue(server_path)
+        self.rpc_server_count_all_jobs(server_path)
+        request_id1 = str(uuid.uuid4())
+        self.rpc_server_push_rpc_queue(server_path, request_id1, "rpc_action1",{"data1": "data1"}, "transaction_tag_1",
+                    1, "rpc_client_queue", 5, 0.5)
+
+        request_id2 = str(uuid.uuid4())
+        self.rpc_server_push_rpc_queue(server_path, request_id2, "rpc_action2",{"data2": "data1"}, "transaction_tag_2",
+                    2, "rpc_client_queue", 5, 0.5)
+        self.rpc_server_count_all_jobs(server_path)
+        request_id3 = str(uuid.uuid4())
+        self.rpc_server_push_rpc_queue(server_path, request_id3, "rpc_action3",{"data3": "data1"}, "transaction_tag_3",
+                    3, "rpc_client_queue", 5, 0.5)
+        self.rpc_server_count_all_jobs(server_path)
+        print("requst_id",request_id1, request_id2, request_id3)
+        print("queued jobs", self.rpc_server_list_jobs_job_types(server_path, 'new_job') )
+        print("server_path", server_path)
+        job_data_1 = self.rpc_server_peak_server_queue(server_path)
+        print("job_data_1", job_data_1)
+       
+        self.rpc_server_count_all_jobs(server_path)
+        job_data_2 = self.rpc_server_peak_server_queue(server_path)
+        print("job_data_2", job_data_2)
+        
+        self.rpc_server_count_all_jobs(server_path)
+        job_data_3 = self.rpc_server_peak_server_queue(server_path)
+        print("job_data_3", job_data_3)
+        
+        self.rpc_server_count_all_jobs(server_path)
+        print("job_data_1['id']", job_data_1['id'])
+        for i , j in job_data_1.items():
+            print("i", i, "j", j)
+        id1 = job_data_1['id']
+        print("id1", id1)
+        self.rpc_server_job_completion_mark(server_path, id1)
+        self.rpc_server_count_all_jobs(server_path)
+        id2 = job_data_2['id']
+        self.rpc_server_job_completion_mark(server_path, id2)
+        self.rpc_server_count_all_jobs(server_path)
+        id3 = job_data_3['id']
+        self.rpc_server_job_completion_mark(server_path, id3)
+        self.rpc_server_count_all_jobs(server_path)
+        
 
     def test_client_queue(self, client_path):
         """
@@ -172,7 +232,7 @@ class KB_Data_Structures:
         print(f"Peek data: {peak_data}")
         print(f"Peek data[0]: {peak_data[0]}")
         self.rpc_client_data_release(client_path, peak_data[0])
-      
+    
         # After second release
         print("\n=== After Second Release ===")
         free_slots = self.rpc_client_free_slots_find(client_path)
@@ -252,17 +312,6 @@ class KB_Data_Structures:
         
         print("\n=== Test Complete ===")
 
-# Example usage:
-if __name__ == "__main__":
-    # Create a new KB_Search instance
-    kb_data_structures = KB_Data_Structures(
-        dbname="knowledge_base",
-        user="gedgar",
-        password="ready2go",
-        host="localhost",
-        port="5432"
-    )   
-    
     """
     Status Data
     """
@@ -371,8 +420,8 @@ if __name__ == "__main__":
     kb_data_structures.push_stream_data(stream_table_keys[0], {"prop1": "val1", "prop2": "val2"})
     print("list_stream_data", kb_data_structures.list_stream_data(stream_table_keys[0]))
     
-    past_timestamp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=15)
-    before_timestamp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=5)
+    past_timestamp = datetime.now(timezone.utc) - timedelta(minutes=15)
+    before_timestamp = datetime.now(timezone.utc) - timedelta(minutes=5)
     print("past_timestamp", past_timestamp)
     print("past data")
     print("list_stream_data", kb_data_structures.list_stream_data(stream_table_keys[0], recorded_after=past_timestamp, recorded_before=before_timestamp))
@@ -394,10 +443,10 @@ if __name__ == "__main__":
     client_descriptions = kb_data_structures.find_description_paths(client_keys)
     print("client_descriptions", client_descriptions)
     
-    kb_data_structures.test_client_queue(client_keys[0])
+    test_client_queue(kb_data_structures, client_keys[0])
     
     
-    exit()
+   
     
     node_ids = kb_data_structures.rpc_server_id_find(node_name=None, properties=None, node_path=None)
     print("rpc_server_node_ids", node_ids)   
@@ -407,5 +456,7 @@ if __name__ == "__main__":
     
     server_descriptions = kb_data_structures.find_description_paths(server_keys)
     print("server_descriptions", server_descriptions)    
+    
+    test_server_functions(kb_data_structures, server_keys[0])
     
     kb_data_structures.query_support.disconnect()

@@ -30,36 +30,35 @@ class Construct_RPC_Server_Table:
         
         # Create the knowledge_base table
         create_table_script = sql.SQL("""
-            CREATE SCHEMA IF NOT EXISTS rpc_server_table;
-            CREATE TABLE  IF NOT EXISTS rpc_server_table.rpc_server_table (
-                id SERIAL PRIMARY KEY,
-                
-              
-                server_path ltree NOT NULL,
-                
-                -- Request information
-                request_id UUID NOT NULL DEFAULT gen_random_uuid(),
-                rpc_action TEXT NOT NULL DEFAULT 'none',
-                request_payload JSONB NOT NULL,
-                request_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- UTC timestamp
-                is_new_result BOOLEAN NOT NULL DEFAULT FALSE,
-                -- Tag to prevent duplicate transactions
-                transaction_tag TEXT NOT NULL,
-                
-                -- Status tracking
-                status TEXT NOT NULL DEFAULT 'completed'  
-                    CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
-                
-                -- Additional useful fields
-                priority INTEGER NOT NULL DEFAULT 0,
-                
-                -- New fields as requested
-                completed_timestamp TIMESTAMPTZ,
-                rpc_client_queue ltree DEFAULT NULL
-                
-               
-            );
-        """)
+        CREATE SCHEMA IF NOT EXISTS rpc_server_table;
+
+        -- Create table if it doesn't exist
+        CREATE TABLE IF NOT EXISTS rpc_server_table.rpc_server_table (
+            id SERIAL PRIMARY KEY,
+            server_path LTREE NOT NULL,
+            
+            -- Request information
+            request_id UUID NOT NULL DEFAULT gen_random_uuid(),
+            rpc_action TEXT NOT NULL DEFAULT 'none',
+            request_payload JSONB NOT NULL,
+            request_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            
+            -- Tag to prevent duplicate transactions
+            transaction_tag TEXT NOT NULL,
+            
+            -- Status tracking
+            state TEXT NOT NULL DEFAULT 'empty'
+                CHECK (state IN ('empty', 'new_job', 'processing')),
+            
+            -- Additional useful fields
+            priority INTEGER NOT NULL DEFAULT 0,
+            
+            -- New fields as requested
+            processing_timestamp TIMESTAMPTZ DEFAULT NULL,
+            completed_timestamp TIMESTAMPTZ DEFAULT NULL,
+            rpc_client_queue LTREE
+        );
+                """)
 
 
         self.cursor.execute(create_table_script)
@@ -122,10 +121,10 @@ class Construct_RPC_Server_Table:
             # Convert paths list to a string format suitable for PostgreSQL ANY operation
             paths_str = ", ".join([f"'{path}'" for path in specified_server_paths])
             
-            # Set is_new_result to FALSE for remaining records before deleting unspecified ones
+            # Set state to empty for remaining records before deleting unspecified ones
             update_query = f"""
                 UPDATE rpc_server_table.rpc_server_table
-                SET is_new_result = FALSE
+                SET state = 'empty'
                 WHERE server_path ::text IN ({paths_str})
             """
             self.cursor.execute(update_query)
@@ -178,10 +177,10 @@ class Construct_RPC_Server_Table:
                     
                     current_count = self.cursor.fetchone()[0]
                     
-                    # Set is_new_result to FALSE for all records with this server_path
+                    # Set state to empty for all records with this server_path
                     self.cursor.execute("""
                         UPDATE rpc_server_table.rpc_server_table
-                        SET is_new_result = FALSE
+                        SET state = 'empty'
                         WHERE server_path::text = %s
                     """, (server_path,))
                     
@@ -210,9 +209,9 @@ class Construct_RPC_Server_Table:
                         for _ in range(records_to_add):
                             self.cursor.execute("""
                                 INSERT INTO rpc_server_table.rpc_server_table (
-                                    server_path, request_payload, transaction_tag, is_new_result
+                                    server_path, request_payload, transaction_tag, state
                                 ) VALUES (
-                                     %s, %s, %s, FALSE
+                                     %s, %s, %s, 'empty'
                                 )
                             """, (
                                  
@@ -255,10 +254,9 @@ class Construct_RPC_Server_Table:
         2. Set server_path to match server_path
         3. Set request_payload to an empty JSON object
         4. Set request_timestamp to current time
-        5. Set is_new_result to False
-        6. Set status to 'pending'
-        7. Clear completed_timestamp (set to NULL)
-        8. Generate a new transaction_tag
+        5. Set state to empty
+        6. Clear completed_timestamp (set to NULL)
+        7. Generate a new transaction_tag
         
         Returns:
             int: Number of records updated
@@ -271,9 +269,8 @@ class Construct_RPC_Server_Table:
                     request_id = gen_random_uuid(),
                     request_payload = '{}',
                     request_timestamp = NOW(),
-                    status = 'pending',
+                    state = 'empty',
                     completed_timestamp = NULL,
-                    is_new_result = FALSE,
                     transaction_tag = CONCAT('reset_', gen_random_uuid()::text)
             """
             

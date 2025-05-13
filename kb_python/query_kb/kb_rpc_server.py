@@ -7,6 +7,9 @@ from psycopg2 import sql
 from psycopg2.extras import Json
 from psycopg2.extensions import register_adapter, AsIs
 
+class NoMatchingRecordError(Exception):
+    pass
+
 class KB_RPC_Server:
     """
     A class to handle the RPC server for the knowledge base.
@@ -21,7 +24,7 @@ class KB_RPC_Server:
         """
         Find the node id for a given node name, properties, node path, and data.
         """
-        print(node_name, properties, node_path)
+    
         result = self.find_rpc_server_ids(node_name, properties, node_path)
         if len(result) == 0:
             raise ValueError(f"No node found matching path parameters: {node_name}, {properties}, {node_path}")
@@ -60,345 +63,174 @@ class KB_RPC_Server:
             return_values.append(key[5])
         return return_values    
     
-    def list_processing_jobs(self, server_path):
+ 
+
+    def list_jobs_job_types(self, server_path,state):
         """
         List records in the table where server_path matches and status is 'processing'.
-        
+
         Args:
-            server_path (str): The server path to match against.
-            
+            server_path (str): The server path to match against (ltree format, e.g., 'root.node1.node2').
+            state (str): The state to match against (e.g., 'processing', 'completed_job').
         Returns:
-            list: A list of records that match the criteria.
-            
+            list: A list of dictionaries containing records that match the criteria.
+
         Raises:
-            Exception: Reraises any exception that occurs during database operations.
+            ValueError: If server_path is invalid or not in ltree format.
+            psycopg2.Error: For database errors.
         """
+        # Validate server_path
+        if not server_path or not isinstance(server_path, str) or not self._is_valid_ltree(server_path):
+            raise ValueError("server_path must be a valid ltree format (e.g., 'root.node1.node2')")
+        if state not in {'empty', 'new_job', 'processing'}:
+            raise ValueError("state must be one of: 'empty', 'new_job', 'processing'")
         try:
-            query = """
+            # Ensure connection is valid
+            if self.conn.closed:
+                raise psycopg2.Error("Database connection is closed")
+
+            # Begin transaction
+            self.cursor.execute("BEGIN")
+
+            # Construct safe query
+            query = sql.SQL("""
                 SELECT *
                 FROM rpc_server_table.rpc_server_table
                 WHERE server_path = %s
-                AND status = 'processing'
+                AND state = %s
                 ORDER BY priority DESC, request_timestamp ASC
-            """
-            
-            # Convert server_path to ltree format if it's not already
-            # This assumes server_path is provided as a string like 'path.to.server'
-            formatted_server_path = server_path
-            
-            # Execute the query
+            """)
+
+            # Execute query
             formatted_results = []
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, (formatted_server_path,))
-                results = cursor.fetchall()
-                
-                # Format results if needed
-                column_names = [desc[0] for desc in cursor.description]
-                for row in results:
-                    row_dict = dict(zip(column_names, row))
-                    formatted_results.append(row_dict)
-                    
+            self.cursor.execute(query, (server_path,state))
+            results = self.cursor.fetchall()
+
+            # Format results as dictionaries
+            column_names = [desc[0] for desc in self.cursor.description]
+            for row in results:
+                row_dict = dict(zip(column_names, row))
+                formatted_results.append(row_dict)
+
+            # Commit transaction
+            self.conn.commit()
             return formatted_results
-        
-        except Exception as e:
-            print(f"Exception in list_waiting_jobs: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise  # Reraise the exception after printing it
-        
-    def list_failed_jobs(self, server_path=None):
+
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            raise psycopg2.Error(f"Database error in list_processing_jobs: {str(e)}")
+        finally:
+            # Ensure transaction is closed
+            self.cursor.execute("COMMIT")
+            
+    def count_all_jobs(self, server_path):
         """
-        List records in the table where status is 'failed' and optionally filtered by server_path.
-        
+        Count all records in the table where server_path matches.
+        """
+        print("empty jobs", self.count_empty_jobs(server_path))
+        print("new jobs", self.count_new_jobs(server_path))
+        print("processing jobs", self.count_processing_jobs(server_path))
+      
+    
+ 
+    def count_processing_jobs(self, server_path):
+        """
+        Count records in the table where server_path matches and state is 'processing'.
+        """
+        return self.count_jobs_job_types(server_path, 'processing')
+
+    def count_new_jobs(self, server_path):
+        """
+        Count records in the table where server_path matches and state is 'new_job'.
+        """
+        return self.count_jobs_job_types(server_path, 'new_job')
+    
+    
+    def count_empty_jobs(self, server_path):
+        """
+        Count records in the table where server_path matches and state is 'empty'.
+        """
+        return self.count_jobs_job_types(server_path, 'empty')
+
+    def count_jobs_job_types(self, server_path,state):
+        """
+        Count records in the table where server_path matches and state is 'processing'.
+
         Args:
-            server_path (str, optional): The server path to match against. If None, returns all failed jobs.
-            
+            server_path (str): The server path to match against (ltree format, e.g., 'root.node1.node2').
+            state (str): The state to match against (e.g., 'empty', 'new_job', 'processing', 'completed_job').
         Returns:
-            list: A list of records that match the criteria.
-            
+            int: The number of records that match the criteria.
+
         Raises:
-            Exception: Reraises any exception that occurs during database operations.
+            ValueError: If server_path is invalid or not in ltree format.
+            psycopg2.Error: For database errors.
         """
+        # Validate server_path
+        if not server_path or not isinstance(server_path, str) or not self._is_valid_ltree(server_path):
+            raise ValueError("server_path must be a valid ltree format (e.g., 'root.node1.node2')")
+        if state not in {'empty', 'new_job', 'processing', 'completed_job'}:
+            raise ValueError("state must be one of: 'empty', 'new_job', 'processing', 'completed_job'")
         try:
-            if server_path is not None:
-                query = """
-                    SELECT *
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE server_path = %s
-                    AND status = 'failed'
-                    ORDER BY priority DESC, request_timestamp ASC
-                """
-                params = (server_path,)
-            else:
-                query = """
-                    SELECT *
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE status = 'failed'
-                    ORDER BY priority DESC, request_timestamp ASC
-                """
-                params = ()
-            
-            # Execute the query
+            # Ensure connection is valid
+            if self.conn.closed:
+                raise psycopg2.Error("Database connection is closed")
+
+            # Begin transaction
+            self.cursor.execute("BEGIN")
+
+            # Construct safe query
+            query = sql.SQL("""
+                SELECT count(*)
+                FROM rpc_server_table.rpc_server_table
+                WHERE server_path = %s
+                AND state = %s
+                
+            """)
+
+            # Execute query
             formatted_results = []
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, params)
-                results = cursor.fetchall()
-                
-                # Format results by creating dictionaries using column names
-                column_names = [desc[0] for desc in cursor.description]
-                for row in results:
-                    row_dict = dict(zip(column_names, row))
-                    formatted_results.append(row_dict)
-                    
+            self.cursor.execute(query, (server_path,state))
+            results = self.cursor.fetchall()
+
+            # Format results as dictionaries
+            column_names = [desc[0] for desc in self.cursor.description]
+            for row in results:
+                row_dict = dict(zip(column_names, row))
+                formatted_results.append(row_dict)
+
+            # Commit transaction
+            self.conn.commit()
             return formatted_results
-        
-        except Exception as e:
-            print(f"Exception in list_failed_jobs: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise  # Reraise the exception after printing it
-        
-    def count_pending_jobs(self, server_path=None):
-        """
-        Count the number of records with status 'pending', optionally filtered by server_path.
-        
-        Args:
-            server_path (str, optional): The server path to match against. If None, counts all pending jobs.
-            
-        Returns:
-            int: The number of pending jobs.
-            
-        Raises:
-            Exception: Reraises any exception that occurs during database operations.
-        """
-        try:
-            if server_path is not None:
-                query = """
-                    SELECT COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE server_path = %s
-                    AND status = 'pending'
-                """
-                params = (server_path,)
-            else:
-                query = """
-                    SELECT COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE status = 'pending'
-                """
-                params = ()
-            
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, params)
-                count = cursor.fetchone()[0]
-                
-            return count
-        
-        except Exception as e:
-            print(f"Exception in count_pending_jobs: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise
 
-    def count_processing_jobs(self, server_path=None):
-        """
-        Count the number of records with status 'processing', optionally filtered by server_path.
-        
-        Args:
-            server_path (str, optional): The server path to match against. If None, counts all processing jobs.
-            
-        Returns:
-            int: The number of processing jobs.
-            
-        Raises:
-            Exception: Reraises any exception that occurs during database operations.
-        """
-        try:
-            if server_path is not None:
-                query = """
-                    SELECT COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE server_path = %s
-                    AND status = 'processing'
-                """
-                params = (server_path,)
-            else:
-                query = """
-                    SELECT COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE status = 'processing'
-                """
-                params = ()
-            
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, params)
-                count = cursor.fetchone()[0]
-                
-            return count
-        
-        except Exception as e:
-            print(f"Exception in count_processing_jobs: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise
+        except psycopg2.Error as e:
+            self.conn.rollback()
+            raise psycopg2.Error(f"Database error in list_processing_jobs: {str(e)}")
+        finally:
+            # Ensure transaction is closed
+            self.cursor.execute("COMMIT")
 
-    def count_completed_jobs(self, server_path=None):
-        """
-        Count the number of records with status 'completed', optionally filtered by server_path.
-        
-        Args:
-            server_path (str, optional): The server path to match against. If None, counts all completed jobs.
-            
-        Returns:
-            int: The number of completed jobs.
-            
-        Raises:
-            Exception: Reraises any exception that occurs during database operations.
-        """
-        try:
-            if server_path is not None:
-                query = """
-                    SELECT COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE server_path = %s
-                    AND status = 'completed'
-                """
-                params = (server_path,)
-            else:
-                query = """
-                    SELECT COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE status = 'completed'
-                """
-                params = ()
-            
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, params)
-                count = cursor.fetchone()[0]
-                
-            return count
-        
-        except Exception as e:
-            print(f"Exception in count_completed_jobs: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise
 
-    def count_failed_jobs(self, server_path=None):
-        """
-        Count the number of records with status 'failed', optionally filtered by server_path.
-        
-        Args:
-            server_path (str, optional): The server path to match against. If None, counts all failed jobs.
-            
-        Returns:
-            int: The number of failed jobs.
-            
-        Raises:
-            Exception: Reraises any exception that occurs during database operations.
-        """
-        try:
-            if server_path is not None:
-                query = """
-                    SELECT COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE server_path = %s
-                    AND status = 'failed'
-                """
-                params = (server_path,)
-            else:
-                query = """
-                    SELECT COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE status = 'failed'
-                """
-                params = ()
-            
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, params)
-                count = cursor.fetchone()[0]
-                
-            return count
-        
-        except Exception as e:
-            print(f"Exception in count_failed_jobs: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise
 
-    def get_job_counts(self, server_path=None):
-        """
-        Get counts of jobs in all statuses, optionally filtered by server_path.
-        
-        Args:
-            server_path (str, optional): The server path to match against. If None, counts all jobs.
-            
-        Returns:
-            dict: A dictionary with counts for each status ('pending', 'processing', 'completed', 'failed').
-            
-        Raises:
-            Exception: Reraises any exception that occurs during database operations.
-        """
-        try:
-            if server_path is not None:
-                query = """
-                    SELECT status, COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    WHERE server_path = %s
-                    GROUP BY status
-                """
-                params = (server_path,)
-            else:
-                query = """
-                    SELECT status, COUNT(*)
-                    FROM rpc_server_table.rpc_server_table
-                    GROUP BY status
-                """
-                params = ()
-            
-            # Initialize counts dictionary with zeros
-            counts = {
-                'pending': 0,
-                'processing': 0,
-                'completed': 0,
-                'failed': 0
-            }
-            
-            with self.conn.cursor() as cursor:
-                cursor.execute(query, params)
-                results = cursor.fetchall()
-                
-                # Update counts with actual values
-                for status, count in results:
-                    counts[status] = count
-                
-            return counts
-        
-        except Exception as e:
-            print(f"Exception in get_job_counts: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise
-        
-        
-    def push_rpc_queue(self, server_path, request_id, rpc_action, request_payload, transaction_tag, 
-                      priority, rpc_client_queue, max_retries=5, wait_time=0.5):
+    def push_rpc_queue(self, server_path, request_id, rpc_action, request_payload, transaction_tag,
+                       priority=0, rpc_client_queue=None, max_retries=5, wait_time=0.5):
         """
         Push a request to the RPC queue.
-        
+
         Args:
             server_path (str): The server path in ltree format (e.g. 'root.node1.node2')
             request_id (str): UUID for the request
+            rpc_action (str): RPC action name
             request_payload (dict): JSON-serializable payload for the request
             transaction_tag (str): Tag to prevent duplicate transactions
             priority (int): Priority of the request (higher number = higher priority)
             rpc_client_queue (str): Client queue in ltree format (e.g. 'client.queue1')
             max_retries (int, optional): Maximum number of retries for transaction conflicts
             wait_time (float, optional): Initial wait time between retries in seconds
-            
+
         Returns:
             dict: The updated record
-            
+
         Raises:
             ValueError: If any parameters fail validation
             NoMatchingRecordError: If no matching record is found to update
@@ -408,7 +240,7 @@ class KB_RPC_Server:
         # Validate server_path (ltree format)
         if not server_path or not isinstance(server_path, str) or not self._is_valid_ltree(server_path):
             raise ValueError("server_path must be a valid ltree format (e.g. 'root.node1.node2')")
-        
+
         # Validate request_id (UUID)
         try:
             if not request_id:
@@ -416,65 +248,71 @@ class KB_RPC_Server:
             else:
                 request_id = str(uuid.UUID(request_id))
         except (ValueError, AttributeError, TypeError):
-            
             raise ValueError("request_id must be a valid UUID string or None")
+
+        # Validate rpc_action
         if not rpc_action or not isinstance(rpc_action, str):
-            raise ValueError("rpc_action must be a non-empty string")      
+            raise ValueError("rpc_action must be a non-empty string")
+
         # Validate request_payload (JSON-serializable)
         if request_payload is None:
             raise ValueError("request_payload cannot be None")
         try:
-            # Test if serializable
             json.dumps(request_payload)
         except (TypeError, OverflowError):
             raise ValueError("request_payload must be JSON-serializable")
-        
+
         # Validate transaction_tag
         if not transaction_tag or not isinstance(transaction_tag, str):
             raise ValueError("transaction_tag must be a non-empty string")
-        
+
         # Validate rpc_client_queue (ltree format)
-        if rpc_client_queue is not None and (not isinstance(rpc_client_queue, str) or 
-                                           not self._is_valid_ltree(rpc_client_queue)):
+        if rpc_client_queue is not None and (not isinstance(rpc_client_queue, str) or
+                                            not self._is_valid_ltree(rpc_client_queue)):
             raise ValueError("rpc_client_queue must be None or a valid ltree format")
-        
+
         # Validate priority
         if not isinstance(priority, int):
             raise ValueError("priority must be an integer")
-        
+
         # Process with retry logic for transaction conflicts
-        retries = 0
+        attempt = 0
         current_wait = wait_time
-        
-        while retries < max_retries:
-            conn = None
+        max_wait = 8  # Cap maximum wait time at 8 seconds
+
+        while attempt < max_retries:
             try:
-                conn = psycopg2.connect(**self.connection_params)
-                conn.autocommit = False
-                cursor = conn.cursor()
-                
-                # First get a lock to prevent concurrent operations
-                cursor.execute("SELECT pg_advisory_xact_lock(hashtext('rpc_server_table'))")
-                
+                # Ensure connection is valid
+                if self.conn.closed:
+                    raise Exception("Database connection is closed")
+
+                # Explicitly begin transaction
+                self.cursor.execute("BEGIN")
+                self.cursor.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+
+                # Acquire advisory lock (schema-specific)
+                lock_key = hash(f"rpc_server_table.rpc_server_table:{server_path}")
+                self.cursor.execute("SELECT pg_advisory_xact_lock(%s)", (lock_key,))
+
                 # Find the earliest completed/failed record with is_new_result=True
-                cursor.execute("""
+                query = sql.SQL("""
                     SELECT id FROM rpc_server_table.rpc_server_table
-                    WHERE is_new_result = TRUE AND status IN ('completed', 'failed')
-                    ORDER BY completed_timestamp ASC
+                    WHERE state = 'empty'
+                    ORDER BY priority DESC, request_timestamp ASC
                     LIMIT 1
                     FOR UPDATE
                 """)
-                
-                record = cursor.fetchone()
-                
+                self.cursor.execute(query)
+                record = self.cursor.fetchone()
+
                 if not record:
-                    conn.rollback()
-                    raise NoMatchingRecordError("No matching record found with is_new_result=True and status in ('completed', 'failed')")
-                
+                    self.conn.rollback()
+                    raise NoMatchingRecordError("No matching record found with state = 'pending'")
+
                 record_id = record[0]
-                
+
                 # Update the record
-                cursor.execute("""
+                update_query = sql.SQL("""
                     UPDATE rpc_server_table.rpc_server_table
                     SET server_path = %s,
                         request_id = %s,
@@ -483,48 +321,47 @@ class KB_RPC_Server:
                         transaction_tag = %s,
                         priority = %s,
                         rpc_client_queue = %s,
-                        is_new_result = TRUE,
+                        state = 'new_job',
                         request_timestamp = NOW() AT TIME ZONE 'UTC',
-                        status = 'pending',
+                       
                         completed_timestamp = NULL
                     WHERE id = %s
                     RETURNING *
-                """, (server_path, request_id,rpc_action, json.dumps(request_payload), transaction_tag, 
-                       priority, rpc_client_queue, record_id))
-                
-                result = cursor.fetchone()
-                conn.commit()
-                
-                # Convert result to dictionary for easier handling
-                columns = [desc[0] for desc in cursor.description]
+                """)
+                self.cursor.execute(update_query, (server_path, request_id, rpc_action, json.dumps(request_payload),
+                                                transaction_tag, priority, rpc_client_queue, record_id))
+                result = self.cursor.fetchone()
+
+                if not result:
+                    self.conn.rollback()
+                    raise Exception("Failed to update record in RPC queue")
+
+                # Commit the transaction
+                self.conn.commit()
+
+                # Convert result to dictionary
+                columns = [desc[0] for desc in self.cursor.description]
                 result_dict = dict(zip(columns, result))
-                
                 return result_dict
-                
-            except psycopg2.errors.SerializationFailure:
-                if conn:
-                    conn.rollback()
-                retries += 1
-                if retries >= max_retries:
-                    raise RuntimeError(f"Failed to push to RPC queue after {max_retries} retries")
-                
-                # Exponential backoff
-                time.sleep(current_wait)
-                current_wait *= 2
-                
+
+            except (psycopg2.errors.SerializationFailure, psycopg2.errors.DeadlockDetected) as e:
+                self.conn.rollback()
+                attempt += 1
+                if attempt < max_retries:
+                    sleep_time = min(current_wait * (2 ** attempt), max_wait)  # Exponential backoff with cap
+                    time.sleep(sleep_time)
+                else:
+                    raise RuntimeError(f"Failed to push to RPC queue after {max_retries} retries: {str(e)}")
+            except psycopg2.Error as e:
+                self.conn.rollback()
+                raise psycopg2.Error(f"Database error in push_rpc_queue: {str(e)}")
             except NoMatchingRecordError:
-                # Don't retry if no matching record is found - just propagate the exception
+                self.conn.rollback()
                 raise
-                
-            except Exception as e:
-                if conn:
-                    conn.rollback()
-                raise e
-                
             finally:
-                if conn:
-                    conn.close()
-        
+                # No need to reset transaction isolation level (it resets automatically after COMMIT/ROLLBACK)
+                pass
+
         raise RuntimeError(f"Failed to push to RPC queue after {max_retries} retries")
     
     def _is_valid_ltree(self, path):
@@ -555,66 +392,70 @@ class KB_RPC_Server:
                 return False
         
         return True
-    
-    def peak_server_queue(self, server_path, retries=5, wait_time=10):
+    def peak_server_queue(self, server_path, retries=5, wait_time=1):
         """
         Finds and processes one pending record from the server queue.
-        
+
         Args:
             server_path: The server path to search for records
             retries: Number of retry attempts if transaction conflicts occur
-            wait_time: Wait time in seconds between retries
-            
+            wait_time: Initial wait time in seconds between retries (uses exponential backoff)
+
         Returns:
-            Dictionary containing record details (id, request_id, rpc_action, 
+            Dictionary containing record details (id, request_id, rpc_action,
             request_payload, transaction_tag, priority, rpc_client_queue) or None if no record found
+
+        Raises:
+            Exception: If the database operation fails after retries or due to other errors
         """
-        import time
-        from psycopg2 import sql
-        import psycopg2.errors
-        
         attempt = 0
         while attempt < retries:
             try:
-                # Set transaction isolation level
+                # Ensure connection is valid
+                if self.conn.closed:
+                    raise Exception("Database connection is closed")
+
+                # Explicitly begin transaction
+                self.cursor.execute("BEGIN")
                 self.cursor.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-                
-                # Find one pending record matching the criteria, ordered by priority and timestamp
+
+                # Find one new job record matching the criteria, ordered by priority and timestamp
                 query = sql.SQL("""
-                    SELECT id, request_id, rpc_action, request_payload, transaction_tag, 
+                    SELECT id, request_id, rpc_action, request_payload, transaction_tag,
                         priority, rpc_client_queue
                     FROM rpc_server_table.rpc_server_table
                     WHERE server_path = %s
-                    AND is_new_result = TRUE
-                    AND status = 'pending'
+                    AND state = 'new_job'
                     ORDER BY priority DESC, request_timestamp ASC
                     LIMIT 1
-                    FOR UPDATE SKIP LOCKED
+                    FOR UPDATE SKIP LOCKED;
                 """)
-                
                 self.cursor.execute(query, (server_path,))
                 record = self.cursor.fetchone()
-                
+
                 if not record:
                     # No pending records found
-                    self.conn.commit()
+                    self.conn.rollback()
                     return None
-                    
+
                 # Update the record status
                 update_query = sql.SQL("""
                     UPDATE rpc_server_table.rpc_server_table
-                    SET is_new_result = FALSE,
-                        status = 'processing',
-                        completed_timestamp = NOW()
+                    SET state = 'processing',
+                        processing_timestamp = NOW() AT TIME ZONE 'UTC'
                     WHERE id = %s
                     RETURNING id
                 """)
-                
                 self.cursor.execute(update_query, (record[0],))
-                
+                updated = self.cursor.fetchone()
+
+                if not updated:
+                    self.conn.rollback()
+                    raise Exception(f"Failed to update record status to processing for id: {record[0]}")
+
                 # Commit the transaction
                 self.conn.commit()
-                
+
                 # Return record details
                 return {
                     "id": record[0],
@@ -625,160 +466,171 @@ class KB_RPC_Server:
                     "priority": record[5],
                     "rpc_client_queue": record[6]
                 }
-                
+
             except (psycopg2.errors.SerializationFailure, psycopg2.errors.DeadlockDetected) as e:
-                # Handle transaction conflicts
                 self.conn.rollback()
                 attempt += 1
                 if attempt < retries:
-                    time.sleep(wait_time)
+                    sleep_time = wait_time * (2 ** attempt)  # Exponential backoff
+                    time.sleep(sleep_time)
                 else:
                     raise Exception(f"Failed to peak server queue after {retries} attempts: {str(e)}")
             except Exception as e:
                 self.conn.rollback()
                 raise Exception(f"Error in peak_server_queue: {str(e)}")
-        
+            finally:
+                # No need to reset isolation level; transaction is already committed or rolled back
+                pass
+
         return None
     
-    
-    def mark_job_completion(self, id, server_path, retries=5, wait_time=10):
+    def mark_job_completion(self, server_path, id, retries=5, wait_time=1):
         """
         Marks a job as completed in the server queue.
-        
+
         Args:
             id: The ID of the record to update
             server_path: The server path to verify
             retries: Number of retry attempts if transaction conflicts occur
-            wait_time: Wait time in seconds between retries
-            
+            wait_time: Initial wait time in seconds between retries (uses exponential backoff)
+
         Returns:
             Boolean indicating success or failure
         """
-        import time
-        from psycopg2 import sql
-        import psycopg2.errors
-        
         attempt = 0
+        
         while attempt < retries:
             try:
-                # Set transaction isolation level
+                # Ensure connection is valid
+                if self.conn.closed:
+                    raise Exception("Database connection is closed")
+
+                # Explicitly begin transaction
+                self.cursor.execute("BEGIN")
                 self.cursor.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-                
+
                 # Verify the record exists with the correct conditions
                 verify_query = sql.SQL("""
                     SELECT id FROM rpc_server_table.rpc_server_table
                     WHERE id = %s
                     AND server_path = %s
-                    AND is_new_result = FALSE
-                    AND status = 'processing'
+                    AND state = 'processing'
                     FOR UPDATE
                 """)
-                
+
                 self.cursor.execute(verify_query, (id, server_path))
                 record = self.cursor.fetchone()
-                
+
                 if not record:
                     self.conn.rollback()
-                    return False  # Record does not exist or doesn't meet conditions
-                    
+                    return False
+
                 # Update the record status to completed
                 update_query = sql.SQL("""
                     UPDATE rpc_server_table.rpc_server_table
-                    SET status = 'completed',
-                        completed_timestamp = NOW()
+                    SET state = 'empty',
+                        completed_timestamp = NOW() AT TIME ZONE 'UTC'
                     WHERE id = %s
                     RETURNING id
                 """)
-                
+
                 self.cursor.execute(update_query, (id,))
                 updated = self.cursor.fetchone()
-                
+
                 # Commit the transaction
                 self.conn.commit()
-                
                 return True if updated else False
-            
+
             except (psycopg2.errors.SerializationFailure, psycopg2.errors.DeadlockDetected) as e:
-                # Handle transaction conflicts
                 self.conn.rollback()
                 attempt += 1
                 if attempt < retries:
-                    time.sleep(wait_time)
+                    sleep_time = wait_time * (2 ** attempt)  # Exponential backoff
+                    time.sleep(sleep_time)
                 else:
                     raise Exception(f"Failed to mark job as completed after {retries} attempts: {str(e)}")
             except Exception as e:
                 self.conn.rollback()
                 raise Exception(f"Error in mark_job_completion: {str(e)}")
-    
-        return False
+            finally:
+                # No need to reset isolation level explicitly, as it resets after commit/rollback
+                pass
 
-    def mark_job_failure(self, id, server_path, retries=5, wait_time=10):
+        return False
+    
+    def clear_server_queue(self, server_path, max_retries=3, retry_delay=1):
         """
-        Marks a job as failed in the server queue.
+        Clear the reply queue by resetting records matching the specified server_path.
+        
+        For each matching record:
+        - Sets a unique UUID for request_id
+        - Resets request_payload to empty JSON object
+        - Updates completed_timestamp to current UTC time
+        - Sets state to 'empty'
+        - Clears rpc_client_queue to NULL
+        
+        Includes record locking with retries to handle concurrent access.
         
         Args:
-            id: The ID of the record to update
-            server_path: The server path to verify
-            retries: Number of retry attempts if transaction conflicts occur
-            wait_time: Wait time in seconds between retries
-            
+            server_path (str): The server path to match for clearing records
+            max_retries (int): Maximum number of retries for acquiring the lock
+            retry_delay (float): Delay in seconds between retry attempts
+        
         Returns:
-            Boolean indicating success or failure
+            int: Number of records updated
         """
-        import time
-        from psycopg2 import sql
-        import psycopg2.errors
+        retry_count = 0
+        row_count = 0
+        original_autocommit = self.conn.autocommit
         
-        attempt = 0
-        while attempt < retries:
+        while retry_count < max_retries:
             try:
-                # Set transaction isolation level
-                self.cursor.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
-                
-                # Verify the record exists with the correct conditions
-                verify_query = sql.SQL("""
-                    SELECT id FROM rpc_server_table.rpc_server_table
-                    WHERE id = %s
-                    AND server_path = %s
-                    AND is_new_result = FALSE
-                    AND status = 'processing'
-                    FOR UPDATE
-                """)
-                
-                self.cursor.execute(verify_query, (id, server_path))
-                record = self.cursor.fetchone()
-                
-                if not record:
+                # Ensure no open transaction
+                if self.conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
                     self.conn.rollback()
-                    return False  # Record does not exist or doesn't meet conditions
+                self.conn.autocommit = False
+                
+                # Use context manager for connection
+                with self.conn:
+                    # Lock relevant records
+                    lock_query = """
+                        SELECT 1 FROM rpc_server_table.rpc_server_table
+                        WHERE server_path = %s::ltree
+                        FOR UPDATE NOWAIT
+                    """
+                    self.cursor.execute(lock_query, (server_path,))
                     
-                # Update the record status to failed
-                update_query = sql.SQL("""
-                    UPDATE rpc_server_table.rpc_server_table
-                    SET status = 'failed',
-                        completed_timestamp = NOW()
-                    WHERE id = %s
-                    RETURNING id
-                """)
+                    # Update records with all specified changes
+                    update_query = """
+                        UPDATE rpc_server_table.rpc_server_table
+                        SET request_id = gen_random_uuid(),
+                            request_payload = '{}',
+                            completed_timestamp = CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
+                            state = 'empty',
+                            rpc_client_queue = NULL
+                        WHERE server_path = %s::ltree
+                    """
+                    self.cursor.execute(update_query, (server_path,))
+                    
+                    row_count = self.cursor.rowcount
+                    self.conn.commit()
+                    
+                    return row_count
                 
-                self.cursor.execute(update_query, (id,))
-                updated = self.cursor.fetchone()
-                
-                # Commit the transaction
-                self.conn.commit()
-                
-                return True if updated else False
-                
-            except (psycopg2.errors.SerializationFailure, psycopg2.errors.DeadlockDetected) as e:
-                # Handle transaction conflicts
+            except psycopg2.errors.LockNotAvailable:
                 self.conn.rollback()
-                attempt += 1
-                if attempt < retries:
-                    time.sleep(wait_time)
+                retry_count += 1
+                
+                if retry_count < max_retries:
+                    time.sleep(retry_delay)
                 else:
-                    raise Exception(f"Failed to mark job as failed after {retries} attempts: {str(e)}")
-            except Exception as e:
+                    raise Exception(f"Failed to acquire lock after {max_retries} attempts for server path: {server_path}")
+            
+            except psycopg2.Error as e:
                 self.conn.rollback()
-                raise Exception(f"Error in mark_job_failure: {str(e)}")
+                raise Exception(f"Failed to clear reply queue for {server_path}: {str(e)}")
+            
+            finally:
+                self.conn.autocommit = original_autocommit
         
-        return False
+        return row_count
