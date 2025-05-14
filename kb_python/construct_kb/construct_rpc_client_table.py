@@ -48,10 +48,9 @@ class Construct_RPC_Client_Table:
                 response_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(), -- UTC timestamp
                 
                 -- Boolean to identify new/unprocessed results
-                is_new_result BOOLEAN NOT NULL DEFAULT TRUE,
+                is_new_result BOOLEAN NOT NULL DEFAULT FALSE
                 
-                -- Additional useful fields
-                error_message TEXT
+              
             );
         """)
         self.cursor.execute(create_table_script)
@@ -253,7 +252,7 @@ class Construct_RPC_Client_Table:
         3. Set response_payload to an empty JSON object
         4. Set response_timestamp to current time
         5. Set is_new_result to TRUE
-        6. Clear error_message (set to NULL)
+    
         
         Returns:
             int: Number of records updated
@@ -271,8 +270,8 @@ class Construct_RPC_Client_Table:
                     server_path = client_path,  -- Set server_path to match client_path
                     response_payload = '{}'::jsonb,
                     response_timestamp = NOW(),
-                    is_new_result = FALSE,
-                    error_message = NULL
+                    is_new_result = FALSE
+                
                 RETURNING id
             """)
             

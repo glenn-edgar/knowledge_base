@@ -54,64 +54,82 @@ class KB_Stream:
     
 
     
-    def push_stream_data(self, path, data):
+    def push_stream_data(self,
+                         path: str,
+                         data: dict,
+                         max_retries: int = 3,
+                         retry_delay: float = 1.0
+                         ) -> int:
         """
-        Find an available record (valid=False) for the given path with the earliest completed_at time,
-        update it with new data, and prepare it for scheduling.
-        
+        Find the earliest record (by recorded_at) for the given path,
+        update it with new data and a fresh timestamp, and return its ID.
+
         Args:
-            path (str): The path in LTREE format
-            data (dict): The JSON data to insert
-            
+            path (str): The path in LTREE format.
+            data (dict): The JSON-serializable data to write.
+            max_retries (int): Max attempts if rows are locked.
+            retry_delay (float): Seconds to wait between retries.
+
         Returns:
-            int: The ID of the updated record
-            
+            int: The ID of the updated record.
+
         Raises:
-            Exception: If no available record is found
+            Exception: If no records exist for this path.
+            RuntimeError: If all matching rows are locked after retries.
         """
-        # Start a transaction
-        try:
-            # Find and lock a record with the given path where valid is false
-            find_query = """
-                SELECT id
-                FROM stream_table.stream_table
-                WHERE path = %s
-                ORDER BY recorded_at ASC
-                LIMIT 1
-                FOR UPDATE SKIP LOCKED
-            """
-            
-            self.cursor.execute(find_query, (path,))
-            result = self.cursor.fetchone()
-            
-            if result is None:
-                self.conn.rollback()
-                raise Exception(f"No available record found for path: {path}")
-            
-            job_id = result[0]
-            
-            # Update the found record with the new data
-            update_query = """
-                UPDATE stream_table.stream_table
-                SET data = %s,
-                    recorded_at = NOW()
-                WHERE id = %s
-                RETURNING id
-            """
-            
-            self.cursor.execute(update_query, (json.dumps(data), job_id))
-            update_result = self.cursor.fetchone()
-            
-            if update_result is None:
-                self.conn.rollback()
-                raise Exception(f"Failed to update record with id: {job_id}")
-                
-            self.conn.commit()
-            return job_id
-            
-        except Exception as e:
-            self.conn.rollback()
-            raise e
+        for attempt in range(1, max_retries + 1):
+            with self.conn.cursor() as cur:
+                # 1) ensure there's at least one record to update
+                cur.execute("""
+                    SELECT COUNT(*)
+                      FROM stream_table.stream_table
+                     WHERE path = %s
+                """, (path,))
+                total = cur.fetchone()[0]
+                if total == 0:
+                    raise Exception(f"No records found for path={path!r}")
+
+                # 2) try to lock the oldest candidate
+                cur.execute("""
+                    SELECT id
+                      FROM stream_table.stream_table
+                     WHERE path = %s
+                     ORDER BY recorded_at ASC
+                     FOR UPDATE SKIP LOCKED
+                     LIMIT 1
+                """, (path,))
+                row = cur.fetchone()
+
+                if not row:
+                    # rows exist but all are currently locked
+                    self.conn.rollback()
+                    if attempt < max_retries:
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        raise RuntimeError(
+                            f"Could not lock any row for path={path!r} after {max_retries} attempts"
+                        )
+
+                record_id = row[0]
+
+                # 3) perform the update
+                cur.execute("""
+                    UPDATE stream_table.stream_table
+                       SET data         = %s,
+                           recorded_at  = NOW()
+                     WHERE id = %s
+                """, (json.dumps(data), record_id))
+
+                if cur.rowcount != 1:
+                    self.conn.rollback()
+                    raise Exception(f"Failed to update record id={record_id}")
+
+                self.conn.commit()
+                return record_id
+
+        # Should never reach here
+        raise RuntimeError("Unexpected error in push_stream_data")
     
 
         

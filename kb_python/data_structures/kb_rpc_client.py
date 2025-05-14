@@ -1,11 +1,15 @@
 import time
-import json
-import logging
 import uuid
+import json
 from datetime import datetime, timezone
 import psycopg2
-from psycopg2.extras import RealDictCursor
-
+from psycopg2.extras import execute_values
+from psycopg2 import OperationalError
+from psycopg2 import errors
+from psycopg2 import sql
+import psycopg2.extras
+psycopg2.extras.register_uuid()
+from psycopg2 import errors
 class KB_RPC_Client:
     """
     A class to handle the RPC client for the knowledge base.
@@ -140,278 +144,311 @@ class KB_RPC_Client:
         except psycopg2.Error as e:
             raise Exception(f"Database error when finding queued slots: {str(e)}")
     
-    def peak_reply_data(self, client_path):
+    def peak_reply_data(self,
+                        client_path: str,
+                        max_retries: int = 3,
+                        retry_delay: float = 1.0
+                        ) -> tuple[int, dict]:
         """
         For a given client_path, find the first record where is_new_result is TRUE
         with the earliest response_timestamp.
-        
+
+        Uses row‐level locking with retries to avoid blocking on concurrent consumers.
+
         Args:
             client_path (str): LTree compatible path for client
-            
+            max_retries (int): Maximum number of retries in case of lock conflicts
+            retry_delay (float): Delay in seconds between retries
+
         Returns:
             tuple: (id, data_dict) where:
                 - id is the record ID
                 - data_dict is a dictionary containing all fields of the record
-                
-        Raises:
-            Exception: If no records with is_new_result=TRUE are found for the client_path
-        """
-        try:
-            with self.conn.cursor() as cursor:
-                query = """
-                    SELECT id, request_id, client_path, server_path, transaction_tag, rpc_action,
-                           response_payload, response_timestamp, is_new_result, error_message
-                    FROM rpc_client_table.rpc_client_table
-                    WHERE client_path = %s AND is_new_result = TRUE
-                    ORDER BY response_timestamp ASC
-                    LIMIT 1
-                """
-                
-                cursor.execute(query, (client_path,))
-                
-                record = cursor.fetchone()
-                
-                if record is None:
-                    return None, None
-                
-                column_names = [desc[0] for desc in cursor.description]
-                data_dict = dict(zip(column_names, record))
-                
-                if 'request_id' in data_dict and data_dict['request_id'] is not None:
-                    data_dict['request_id'] = str(data_dict['request_id'])
-                
-                if 'response_timestamp' in data_dict and isinstance(data_dict['response_timestamp'], datetime):
-                    data_dict['response_timestamp'] = data_dict['response_timestamp'].isoformat()
-                
-                record_id = data_dict.pop('id')
-                
-                return record_id, data_dict
-                
-        except psycopg2.Error as e:
-            raise Exception(f"Database error when peeking reply data: {str(e)}")
 
-    def release_rpc_data(self, client_path, id, max_retries=3, retry_delay=1):
+        Raises:
+            Exception: If no records with is_new_result=TRUE are ever found
+            RuntimeError: If all matching rows are locked after max_retries
+        """
+        attempt = 0
+        while attempt < max_retries:
+            try:
+                with self.conn.cursor() as cur:
+                    # 1) make sure there's something to peek
+                    cur.execute("""
+                        SELECT COUNT(*) 
+                          FROM rpc_client_table.rpc_client_table
+                         WHERE client_path = %s
+                           AND is_new_result = TRUE
+                    """, (client_path,))
+                    total = cur.fetchone()[0]
+                    if total == 0:
+                        raise Exception(f"No new replies for client_path={client_path!r}")
+
+                    # 2) grab the earliest by timestamp, skipping any locked by others
+                    cur.execute("""
+                        SELECT *
+                          FROM rpc_client_table.rpc_client_table
+                         WHERE client_path = %s
+                           AND is_new_result = TRUE
+                         ORDER BY response_timestamp ASC
+                         FOR UPDATE SKIP LOCKED
+                         LIMIT 1
+                    """, (client_path,))
+
+                    row = cur.fetchone()
+                    if not row:
+                        # rows exist but all are locked → retry
+                        self.conn.rollback()
+                        attempt += 1
+                        time.sleep(retry_delay)
+                        continue
+
+                    # 3) map columns to values
+                    cols = [desc.name for desc in cur.description]
+                    data = dict(zip(cols, row))
+                    record_id = data.pop('id')
+
+                    # 4) rollback (we only wanted to peek, not modify)
+                    self.conn.rollback()
+                    return record_id, data
+
+            except errors.LockNotAvailable:
+                # lock conflict: rollback and retry
+                self.conn.rollback()
+                attempt += 1
+                time.sleep(retry_delay)
+
+        # after all retries we still couldn't lock anything
+        raise RuntimeError(f"Could not lock a new-reply row after {max_retries} attempts")
+            
+
+    def release_rpc_data(self,
+                         client_path: str,
+                         record_id: int,
+                         max_retries: int = 3,
+                         retry_delay: float = 1.0
+                         ) -> bool:
         """
         For a given ID, verify the record matches the client_path and is_new_result is TRUE,
         then set is_new_result to FALSE. Contains protection against parallel transactions.
-        
+
         Args:
             client_path (str): LTree compatible path for client
-            id (int): The ID of the record to release
+            record_id (int): The ID of the record to release
             max_retries (int): Maximum number of retries in case of lock conflicts
             retry_delay (float): Delay in seconds between retries
-            
+
         Returns:
             bool: True if a record was successfully released, False if no matching record was found
-            
-        Raises:
-            Exception: If database error occurs or cannot obtain lock after retries
-        """
-        retries = 0
-        original_autocommit = self.conn.autocommit
-        print(f"Releasing RPC data for ID: {id}")
-        while retries <= max_retries:
-            try:
-                # Ensure no open transaction before setting autocommit
-                if self.conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
-                    self.conn.rollback()
-                self.conn.autocommit = False
-                with self.conn.cursor() as transaction_cursor:
-                    verify_query = """
-                        SELECT id
-                        FROM rpc_client_table.rpc_client_table
-                        WHERE id = %s AND client_path = %s AND is_new_result = TRUE
-                        FOR UPDATE NOWAIT
-                    """
-                    
-                    transaction_cursor.execute(verify_query, (id, client_path))
-                    
-                    if transaction_cursor.fetchone() is None:
-                        self.conn.rollback()
-                        return False
-                    
-                    update_query = """
-                        UPDATE rpc_client_table.rpc_client_table
-                        SET is_new_result = FALSE
-                        WHERE id = %s
-                    """
-                    
-                    transaction_cursor.execute(update_query, (id,))
-                    
-                    self.conn.commit()
-                    return True
-                    
-            except psycopg2.errors.LockNotAvailable:
-                self.conn.rollback()
-                if retries < max_retries:
-                    time.sleep(retry_delay)
-                    retries += 1
-                else:
-                    raise Exception(f"Could not obtain lock on record ID {id} after {max_retries} attempts")
-                    
-            except psycopg2.Error as e:
-                self.conn.rollback()
-                raise Exception(f"Database error when releasing RPC data: {str(e)}")
-                
-            finally:
-                self.conn.autocommit = original_autocommit
-        
-        raise Exception(f"Failed to release RPC data for ID {id} after {max_retries} attempts")    
 
-    def clear_reply_queue(self, client_path, max_retries=3, retry_delay=1):
+        Raises:
+            RuntimeError: If cannot obtain lock after retries
+            Exception: On any other database error
+        """
+        attempt = 0
+        while attempt < max_retries:
+            try:
+                with self.conn.cursor() as cur:
+                    # start a transaction
+                    cur.execute("BEGIN;")
+                    
+                    # try to lock the specific row
+                    cur.execute("""
+                        SELECT id
+                          FROM rpc_client_table.rpc_client_table
+                         WHERE id = %s
+                           AND client_path = %s
+                           AND is_new_result = TRUE
+                         FOR UPDATE NOWAIT
+                    """, (record_id, client_path))
+                    row = cur.fetchone()
+
+                    # if no match (wrong id, path, or already released), bail out
+                    if not row:
+                        cur.execute("COMMIT;")
+                        return False
+
+                    # perform the release
+                    cur.execute("""
+                        UPDATE rpc_client_table.rpc_client_table
+                           SET is_new_result = FALSE
+                         WHERE id = %s
+                    """, (record_id,))
+
+                    cur.execute("COMMIT;")
+                    return True
+
+            except errors.LockNotAvailable:
+                # someone else holds the lock—rollback, wait, and retry
+                self.conn.rollback()
+                attempt += 1
+                time.sleep(retry_delay)
+
+            except Exception:
+                # any other error: rollback and re‐raise
+                self.conn.rollback()
+                raise
+
+        # if we exhaust retries without locking, signal failure
+        raise RuntimeError(f"Could not lock record id={record_id} after {max_retries} attempts")
+    def clear_reply_queue(self,
+                          client_path: str,
+                          max_retries: int = 3,
+                          retry_delay: float = 1.0
+                          ) -> int:
         """
         Clear the reply queue by resetting records matching the specified client_path.
-        
+
         For each matching record:
         - Sets a unique UUID for request_id
         - Sets server_path equal to client_path
         - Resets response_payload to empty JSON object
         - Updates response_timestamp to current UTC time
         - Sets is_new_result to FALSE
-        - Clears error_message
-        
+
         Includes record locking with retries to handle concurrent access.
-        
+
         Args:
-            client_path (str): The client path to match for clearing records
+            client_path (ltree value): The client path to match for clearing records
             max_retries (int): Maximum number of retries for acquiring the lock
             retry_delay (float): Delay in seconds between retry attempts
-        
+
         Returns:
             int: Number of records updated
         """
-        retry_count = 0
-        row_count = 0
-        original_autocommit = self.conn.autocommit
-        
-        while retry_count < max_retries:
+        attempt = 0
+        while attempt < max_retries:
             try:
-                # Ensure no open transaction before setting autocommit
-                if self.conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
-                    self.conn.rollback()
-                self.conn.autocommit = False
-                with self.conn.cursor() as cursor:
-                    lock_query = """
-                        SELECT 1 FROM rpc_client_table.rpc_client_table
+                with self.conn.cursor() as cur:
+                    # BEGIN a transaction explicitly
+                    cur.execute("BEGIN;")
+
+                    # Lock all matching rows without waiting
+                    cur.execute("""
+                        SELECT id
+                        FROM rpc_client_table.rpc_client_table
                         WHERE client_path = %s
                         FOR UPDATE NOWAIT
-                    """
-                    cursor.execute(lock_query, (client_path,))
-                    
-                    update_query = """
-                        UPDATE rpc_client_table.rpc_client_table
-                        SET request_id = gen_random_uuid(),
-                            server_path = client_path,
-                            response_payload = '{}',
-                            response_timestamp = NOW(),
-                            is_new_result = FALSE,
-                            error_message = ''
-                        WHERE client_path = %s
-                    """
-                    
-                    cursor.execute(update_query, (client_path,))
-                    
-                    row_count = cursor.rowcount
-                    
-                    self.conn.commit()
-                    
-                    logging.info(f"Successfully cleared {row_count} records for client path: {client_path}")
-                    return row_count
-            
-            except psycopg2.errors.LockNotAvailable:
+                    """, (client_path,))
+                    rows = cur.fetchall()
+
+                    # If no rows found, nothing to do
+                    if not rows:
+                        cur.execute("COMMIT;")
+                        return 0
+
+                    updated = 0
+                    # Update each locked row individually, assigning a fresh UUID per row
+                    for (row_id,) in rows:
+                        new_uuid = str(uuid.uuid4())
+                        cur.execute("""
+                            UPDATE rpc_client_table.rpc_client_table
+                            SET
+                                request_id        = %s,
+                                server_path       = %s,
+                                response_payload  = %s,
+                                response_timestamp= NOW(),
+                                is_new_result     = FALSE
+                            WHERE id = %s
+                        """, (new_uuid, client_path, json.dumps({}), row_id))
+                        updated += cur.rowcount
+
+                    # Commit all updates
+                    cur.execute("COMMIT;")
+                    return updated
+
+            except errors.LockNotAvailable:
+                # Roll back and retry after a short pause
                 self.conn.rollback()
-                retry_count += 1
-                logging.warning(f"Lock contention when clearing reply queue for {client_path}. "
-                              f"Retry {retry_count}/{max_retries}")
-                
-                if retry_count < max_retries:
-                    time.sleep(retry_delay)
-                else:
-                    raise Exception(f"Failed to acquire lock after {max_retries} attempts for client path: {client_path}")
-            
-            except psycopg2.Error as e:
-                self.conn.rollback()
-                logging.error(f"Database error while clearing reply queue: {str(e)}")
-                raise Exception(f"Failed to clear reply queue for {client_path}: {str(e)}")
-            
-            finally:
-                self.conn.autocommit = original_autocommit
-           
-    def push_reply_data(self, client_path, request_uuid, server_path, rpc_action, transaction_tag, reply_data, error_text):
+                attempt += 1
+                time.sleep(retry_delay)
+
+        # If we exit the loop, we never acquired the lock
+        raise RuntimeError(f"Could not acquire lock after {max_retries} retries")
+    
+    def push_reply_data(self, client_path, request_uuid, server_path, rpc_action, transaction_tag, reply_data, max_retries=3, retry_delay=1):
         """
-        Update the earliest record with is_new_result=False that matches the client_path
+        Update the earliest record with is_new_result=False that matches the client_path in rpc_client_table.rpc_client_table.
         
         Args:
+            self.conn and self.cursor are postgres connectors
             client_path (str): LTree compatible path for client
             request_uuid (str): UUID of the request
             server_path (str): LTree compatible path for server
             rpc_action (str): Action to be performed
             transaction_tag (str): Transaction tag
             reply_data (dict): Dictionary containing reply data
-            error_text (str): Error message if any
+            max_retries (int, optional): Maximum number of retry attempts for transient errors. Defaults to 3.
+            retry_delay (float, optional): Delay in seconds between retry attempts. Defaults to 1.
             
         Raises:
-            Exception: If no available record with is_new_result=False is found
+            Exception: If no available record with is_new_result=False is found or if all retries fail
         """
-        original_autocommit = self.conn.autocommit
-        try:
-            if isinstance(request_uuid, uuid.UUID):
-                request_uuid = str(request_uuid)
-                
-            # Ensure no open transaction before setting autocommit
-            if self.conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:
-                self.conn.rollback()
-                
-            self.conn.autocommit = False
-            with self.conn.cursor() as cursor:
-                cursor.execute("""
+        attempt = 0
+        last_error = None
+        
+        while attempt <= max_retries:
+            try:
+                # Query to find the earliest record with is_new_result=False for the client_path
+                select_query = """
                     SELECT id 
-                    FROM rpc_client_table.rpc_client_table
-                    WHERE client_path = %s AND is_new_result = FALSE
-                    ORDER BY response_timestamp ASC
+                    FROM rpc_client_table.rpc_client_table 
+                    WHERE client_path = %s 
+                    AND is_new_result = FALSE 
+                    ORDER BY response_timestamp ASC 
                     LIMIT 1
-                    FOR UPDATE NOWAIT
-                """, (client_path,))
+                """
+                self.cursor.execute(select_query, (client_path,))
+                record = self.cursor.fetchone()
                 
-                result = cursor.fetchone()
-                if not result:
-                    raise Exception("Table_full_exception: No available record with is_new_result=False")
+                if not record:
+                    raise Exception("No available record with is_new_result=False found for the given client_path")
                 
-                record_id = result[0]
+                record_id = record[0]
                 
-                cursor.execute("""
-                    UPDATE rpc_client_table.rpc_client_table
+                # Update the record with provided data
+                update_query = """
+                    UPDATE rpc_client_table.rpc_client_table 
                     SET request_id = %s,
                         server_path = %s,
                         rpc_action = %s,
                         transaction_tag = %s,
                         response_payload = %s,
-                        response_timestamp = %s,
                         is_new_result = TRUE,
-                        error_message = %s
+                        response_timestamp = CURRENT_TIMESTAMP
                     WHERE id = %s
-                """, (
+                """
+                self.cursor.execute(update_query, (
                     request_uuid,
                     server_path,
                     rpc_action,
                     transaction_tag,
-                    json.dumps(reply_data),
-                    datetime.now(timezone.utc),
-                    error_text,
+                    json.dumps(reply_data),  # Convert dict to JSONB for PostgreSQL
                     record_id
                 ))
                 
+                # Commit the transaction
                 self.conn.commit()
+                return  # Success, exit the function
                 
-        except psycopg2.Error as e:
-            self.conn.rollback()
-            if "could not obtain lock" in str(e):
-                raise Exception("Parallel operation detected, try again later")
-            else:
-                raise Exception(f"Database error when pushing reply data: {str(e)}")
+            except (psycopg2.OperationalError, psycopg2.DatabaseError) as e:
+                # Rollback in case of error
+                self.conn.rollback()
+                last_error = e
+                attempt += 1
                 
-        finally:
-            self.conn.autocommit = original_autocommit
+                if attempt > max_retries:
+                    raise Exception(f"Failed after {max_retries} retries: {str(last_error)}")
+                
+                # Wait before retrying
+                time.sleep(retry_delay)
+            except Exception as e:
+                # Rollback for non-transient errors and re-raise immediately
+                self.conn.rollback()
+                raise e
+        
+        # This line should never be reached due to the raise in the retry loop
+        raise Exception(f"Failed after {max_retries} retries: {str(last_error)}")
     
     def list_waiting_jobs(self, client_path=None):
         """
@@ -433,7 +470,7 @@ class KB_RPC_Client:
                 if client_path is None:
                     query = """
                         SELECT id, request_id, client_path, server_path, 
-                               response_payload, response_timestamp, is_new_result, error_message
+                               response_payload, response_timestamp, is_new_result
                         FROM rpc_client_table.rpc_client_table
                         WHERE is_new_result = TRUE
                         ORDER BY response_timestamp ASC
@@ -442,7 +479,7 @@ class KB_RPC_Client:
                 else:
                     query = """
                         SELECT id, request_id, client_path, server_path, 
-                               response_payload, response_timestamp, is_new_result, error_message
+                               response_payload, response_timestamp, is_new_result
                         FROM rpc_client_table.rpc_client_table
                         WHERE is_new_result = TRUE AND client_path = %s
                         ORDER BY response_timestamp ASC

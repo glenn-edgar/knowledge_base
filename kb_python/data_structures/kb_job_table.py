@@ -1,4 +1,8 @@
+import time
 import json
+import psycopg2
+from psycopg2 import errors, sql
+
 
 class KB_Job_Queue:
     """
@@ -122,163 +126,212 @@ class KB_Job_Queue:
             # But we should propagate the error
             raise Exception(f"Error counting free jobs: {str(e)}")
         
-    def peak_job_data(self, path):
+    def peak_job_data(self, path, max_retries=3, retry_delay=1):
         """
         Find the job with the earliest schedule_at time for a given path where 
-        valid is true, update its started_at timestamp to current time,
+        valid is true and is_active is false, update its started_at timestamp to current time,
         set is_active to true, and return the job information.
-        
+
         Args:
             path (str): The path to search for in LTREE format
-        
+            max_retries (int): Maximum number of retries in case of lock conflicts
+            retry_delay (float): Delay in seconds between retries
+
         Returns:
             tuple/None: A tuple containing (id, data, schedule_at) from the job, or None if no jobs found
         """
-        try:
-            # Find and lock the job with the earliest schedule_at time
-            find_query = """
-                SELECT id, data, schedule_at
-                FROM job_table.job_table
-                WHERE path = %s
-                AND valid = TRUE
-                AND is_active = FALSE
-                ORDER BY schedule_at ASC
-                LIMIT 1
-                FOR UPDATE SKIP LOCKED
-            """
-            
-            self.cursor.execute(find_query, (path,))
-            result = self.cursor.fetchone()
-            
-            if result is None:
+        attempt = 0
+        while attempt < max_retries:
+            try:
+                # 1) try to select & lock the next available job
+                find_query = """
+                    SELECT id, data, schedule_at
+                      FROM job_table.job_table
+                     WHERE path = %s
+                       AND valid = TRUE
+                       AND is_active = FALSE
+                     ORDER BY schedule_at ASC
+                     FOR UPDATE SKIP LOCKED
+                     LIMIT 1
+                """
+                self.cursor.execute(find_query, (path,))
+                result = self.cursor.fetchone()
+
+                # 2) no jobs available
+                if result is None:
+                    self.conn.rollback()
+                    return None
+
+                job_id, job_data, schedule_at = result
+
+                # 3) mark it as active
+                update_query = """
+                    UPDATE job_table.job_table
+                       SET started_at = NOW(),
+                           is_active  = TRUE
+                     WHERE id = %s
+                     RETURNING id
+                """
+                self.cursor.execute(update_query, (job_id,))
+                update_result = self.cursor.fetchone()
+
+                if update_result is None:
+                    # shouldn't happen, but safe guard
+                    self.conn.rollback()
+                    return None
+
+                self.conn.commit()
+                return job_id, job_data, schedule_at
+
+            except errors.LockNotAvailable:
+                # someone else holds the lock: rollback & retry
                 self.conn.rollback()
-                return None
-                
-            job_id, job_data, schedule_at = result
-            
-            # Update the started_at field to current time and set is_active to true
-            update_query = """
-                UPDATE job_table.job_table
-                SET started_at = NOW(),
-                    is_active = TRUE
-                WHERE id = %s
-                RETURNING id
-            """
-            
-            self.cursor.execute(update_query, (job_id,))
-            update_result = self.cursor.fetchone()
-            
-            if update_result is None:
+                attempt += 1
+                time.sleep(retry_delay)
+
+            except Exception:
+                # any other error: rollback & propagate
                 self.conn.rollback()
-                return None
-                
-            self.conn.commit()
-            return job_id, job_data, schedule_at
-            
-        except Exception as e:
-            self.conn.rollback()
-            raise e
+                raise
+
+        # exhausted retries without getting a lock
+        raise RuntimeError(
+            f"Could not lock and claim a job for path={path!r} after {max_retries} retries"
+        )
     
-    def delete_job_data(self, id):
+    def mark_job_completed(self,
+                           id: int,
+                           max_retries: int = 3,
+                           retry_delay: float = 1.0
+                           ) -> bool:
         """
-        Mark a record matching the given id as completed.
-        
+        For a record matching the given id, set completed_at to current time,
+        set valid to FALSE, and set is_active to FALSE. Protects against
+        parallel transactions with retries.
+
         Args:
             id (int): The ID of the job record
-            
+            max_retries (int): Maximum number of retries in case of lock conflicts
+            retry_delay (float): Delay in seconds between retries
+
         Returns:
             bool: True if the operation was successful
-            
+
         Raises:
             Exception: If no matching record is found
+            RuntimeError: If unable to obtain lock after max_retries
         """
-        try:
-            # Update the record directly and check if it was found
-            update_query = """
-                UPDATE job_table.job_table
-                SET completed_at = NOW(),
-                    valid = FALSE,
-                    is_active = FALSE
-                WHERE id = %s
-                RETURNING id
-            """
-            
-            self.cursor.execute(update_query, (id,))
-            result = self.cursor.fetchone()
-            
-            if result is None:
+        attempt = 0
+        while attempt < max_retries:
+            try:
+                with self.conn.cursor() as cur:
+                    # begin transaction
+                    cur.execute("BEGIN;")
+
+                    # try to lock the specific row
+                    cur.execute("""
+                        SELECT id
+                          FROM job_table.job_table
+                         WHERE id = %s
+                         FOR UPDATE NOWAIT
+                    """, (id,))
+                    row = cur.fetchone()
+
+                    # if no row, nothing to complete
+                    if not row:
+                        cur.execute("COMMIT;")
+                        raise Exception(f"No job found with id={id}")
+
+                    # perform the update to mark completion
+                    cur.execute("""
+                        UPDATE job_table.job_table
+                           SET completed_at = NOW(),
+                               valid        = FALSE,
+                               is_active    = FALSE
+                         WHERE id = %s
+                    """, (id,))
+
+                    # commit and return success
+                    cur.execute("COMMIT;")
+                    return True
+
+            except errors.LockNotAvailable:
+                # another transaction holds the lock: rollback and retry
                 self.conn.rollback()
-                raise Exception(f"No record found for id: {id}")
-            
-            self.conn.commit()
-            return True
-            
-        except Exception as e:
-            self.conn.rollback()
-            raise e
+                attempt += 1
+                time.sleep(retry_delay)
+
+            except Exception:
+                # rollback and propagate any other error
+                self.conn.rollback()
+                raise
+
+        # if we exhaust retries without locking, raise an error
+        raise RuntimeError(f"Could not lock job id={id} after {max_retries} attempts")
     
-    def push_job_data(self, path, data):
+    def push_job_data(self, path, data, max_retries=3, retry_delay=1):
         """
         Find an available record (valid=False) for the given path with the earliest completed_at time,
         update it with new data, and prepare it for scheduling.
-        
+
         Args:
             path (str): The path in LTREE format
             data (dict): The JSON data to insert
-            
+            max_retries (int): Maximum number of retries in case of lock conflicts
+            retry_delay (float): Delay in seconds between retries
+
         Returns:
             int: The ID of the updated record
-            
+
         Raises:
-            Exception: If no available record is found
+            Exception: If no available record is found or if locks aren’t obtained after retries
         """
-        # Start a transaction
-        try:
-            # Find and lock a record with the given path where valid is false
-            find_query = """
-                SELECT id
-                FROM job_table.job_table
-                WHERE path = %s
-                AND valid = FALSE
-                ORDER BY completed_at ASC
-                LIMIT 1
-                FOR UPDATE SKIP LOCKED
-            """
-            
-            self.cursor.execute(find_query, (path,))
-            result = self.cursor.fetchone()
-            
-            if result is None:
-                self.conn.rollback()
-                raise Exception(f"No available record found for path: {path}")
-            
-            job_id = result[0]
-            
-            # Update the found record with the new data
-            update_query = """
-                UPDATE job_table.job_table
-                SET data = %s,
-                    valid = TRUE,
-                    is_active = FALSE,
-                    schedule_at = NOW()
-                WHERE id = %s
-                RETURNING id
-            """
-            
-            self.cursor.execute(update_query, (json.dumps(data), job_id))
-            update_result = self.cursor.fetchone()
-            
-            if update_result is None:
-                self.conn.rollback()
-                raise Exception(f"Failed to update record with id: {job_id}")
-                
-            self.conn.commit()
-            return job_id
-            
-        except Exception as e:
-            self.conn.rollback()
-            raise e
-    
+        select_sql = sql.SQL("""
+            SELECT id
+            FROM job_table.job_table
+            WHERE path = %s
+            AND valid = FALSE
+            ORDER BY completed_at ASC
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+        """)
+        update_sql = sql.SQL("""
+            UPDATE job_table.job_table
+            SET data = %s,
+                schedule_at = timezone('UTC', now()),
+                started_at  = timezone('UTC', now()),
+                completed_at= timezone('UTC', now()),
+                valid      = TRUE,
+                is_active  = FALSE
+            WHERE id = %s
+            RETURNING id
+        """)
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                # start a new transaction block
+                with self.conn:
+                    with self.conn.cursor() as cur:
+                        # try to grab a row
+                        cur.execute(select_sql, (path,))
+                        row = cur.fetchone()
+                        if not row:
+                            raise Exception(f"No available job slot for path '{path}'")
+
+                        job_id = row[0]
+                        # update it
+                        cur.execute(update_sql, (json.dumps(data), job_id))
+                        updated = cur.fetchone()
+                        return updated[0]
+
+            except (psycopg2.OperationalError, psycopg2.errors.LockNotAvailable) as e:
+                # Lock not available → retry
+                if attempt < max_retries:
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    raise Exception(f"Could not acquire lock after {max_retries} attempts") from e
+        
     def list_pending_jobs(self, path, limit=None, offset=0):
         """
         List all jobs for a given path where valid is True and is_active is False,
@@ -471,6 +524,7 @@ class KB_Job_Queue:
                 UPDATE job_table.job_table
                 SET schedule_at = NOW(),
                     started_at = NOW(),
+                    completed_at = NOW(),
                     is_active = %s,
                     valid = %s,
                     data = %s

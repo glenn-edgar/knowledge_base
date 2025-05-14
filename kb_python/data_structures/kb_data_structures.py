@@ -39,7 +39,7 @@ class KB_Data_Structures:
         self.get_queued_number = self.job_queue.get_queued_number
         self.get_free_number = self.job_queue.get_free_number
         self.peak_job_data = self.job_queue.peak_job_data
-        self.delete_job_data = self.job_queue.delete_job_data
+        self.mark_job_completed = self.job_queue.mark_job_completed
         self.push_job_data = self.job_queue.push_job_data
         self.list_pending_jobs = self.job_queue.list_pending_jobs
         self.list_active_jobs = self.job_queue.list_active_jobs
@@ -176,8 +176,7 @@ if __name__ == "__main__":
             "xxx", 
             "Action1", 
             "xxx", 
-            {"data1": "data1"}, 
-            "fff"
+            {"data1": "data1"}
         )
         print(f"Pushed reply data with request ID: {request_id1}")
         
@@ -188,8 +187,7 @@ if __name__ == "__main__":
             "xxx", 
             "Action2", 
             "yyy", 
-            {"data2": "data2"}, 
-            "fff"
+            {"data2": "data2"}
         )
         print(f"Pushed reply data with request ID: {request_id2}")
         
@@ -266,8 +264,7 @@ if __name__ == "__main__":
             "xxx", 
             "Action1", 
             "xxx", 
-            {"data1": "data1"}, 
-            "fff"
+            {"data1": "data1"}
         )
         print(f"Pushed reply data with request ID: {request_id3}")
         
@@ -278,8 +275,7 @@ if __name__ == "__main__":
             "xxx", 
             "Action2", 
             "yyy", 
-            {"data2": "data2"}, 
-            "fff"
+            {"data2": "data2"}
         )
         print(f"Pushed reply data with request ID: {request_id4}")
         
@@ -391,7 +387,7 @@ if __name__ == "__main__":
     print("list_pending_jobs", kb_data_structures.list_pending_jobs(job_key))
     print("list_active_jobs", kb_data_structures.list_active_jobs(job_key))
     
-    kb_data_structures.delete_job_data(job_id)
+    kb_data_structures.mark_job_completed(job_id)
     free_number = kb_data_structures.get_free_number(job_key)
     print("free_number", free_number)
     
@@ -402,7 +398,7 @@ if __name__ == "__main__":
     kb_data_structures.clear_job_queue(job_key)
     free_number = kb_data_structures.get_free_number(job_key)
     print("free_number", free_number)
-    
+
     """
     Stream tables
     """
