@@ -62,7 +62,7 @@ class Construct_KB(KnowledgeBaseManager):
     def select_kb(self, kb_name):
         if kb_name not in self.path:
             raise ValueError(f"Knowledge base {kb_name} does not exist")
-        print(f"Selected knowledge base: {kb_name}")
+        
         self.working_kb = kb_name
         
         
@@ -99,9 +99,7 @@ class Construct_KB(KnowledgeBaseManager):
             raise ValueError(f"Path {node_path} already exists in knowledge base")
         
         self.path_values[self.working_kb][node_path] = True
-        print(f"kb_name: {self.working_kb}")
-        print(f"node_path: {node_path}")
-        print(f"path_values: {self.path_values[self.working_kb]}")
+       
         path = ".".join(self.path[self.working_kb])
         KnowledgeBaseManager.add_node(self, self.working_kb, link, node_name, node_properties, node_data,path)
        
@@ -147,10 +145,13 @@ class Construct_KB(KnowledgeBaseManager):
             raise AssertionError(", ".join(error_msg))
         
         
-    def add_link_node(self,child_kb, child_path):
-        KnowledgeBaseManager.add_link(self, self.working_kb, ".".join(self.path[self.working_kb]), child_kb, child_path)
+    def add_link_node(self,link_name):
+        KnowledgeBaseManager.add_link(self, self.working_kb,self.working_kb + "." + ".".join(self.path[self.working_kb]), link_name)
    
-        
+    def add_link_mount(self, child_kb, child_path, link_mount_name, description = ""):
+        KnowledgeBaseManager.add_link_mount(self, self.working_kb,self.working_kb + "." + ".".join(self.path[self.working_kb]), 
+                                            link_mount_name, description)
+    
     def check_installation(self):
         """
         Checks if the installation is correct by verifying that the path is empty.
@@ -182,61 +183,47 @@ if __name__ == '__main__':
     DB_PASSWORD = "ready2go"
     DB_TABLE = "knowledge_base"
 
+    print("starting unit test")
+    kb = Construct_KB(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_TABLE )
 
-    with Construct_KB(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_TABLE ) as kb:
 
+
+ 
+    kb.add_kb("kb1", "First knowledge base")
+    kb.select_kb("kb1")
+    kb.add_header_node("header1_link", "header1_name", {"prop1": "val1"}, {"data":"header1_data"})
+   
+    kb.add_info_node( "info1_link", "info1_name", {"prop2": "val2"}, {"data":"info1_data"})
+
+    kb.leave_header_node("header1_link", "header1_name")
+ 
+    kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, {"data":"header2_data"})
+    kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, {"data":"info2_data"})
+    kb.add_link_mount("kb1", "header2_link.header2_name", "link1", "link1 description")
+    kb.leave_header_node("header2_link", "header2_name")
+  
+    kb.add_kb("kb2", "Second knowledge base")
+    kb.select_kb("kb2")
+    kb.add_header_node("header1_link", "header1_name", {"prop1": "val1"}, {"data":"header1_data"})
+   
     
+    kb.add_info_node( "info1_link", "info1_name", {"prop2": "val2"}, {"data":"info1_data"})
+  
 
-        print("Initial state:")
-        print(f"Path: {kb.path}")
-        kb.add_kb("kb1", "First knowledge base")
-        kb.select_kb("kb1")
-        kb.add_header_node("header1_link", "header1_name", {"prop1": "val1"}, {"data":"header1_data"})
-        print("\nAfter add_header_node:")
-        print(f"Path: {kb.path}")
-        
-        kb.add_info_node( "info1_link", "info1_name", {"prop2": "val2"}, {"data":"info1_data"})
-        print("\nAfter add_info_node:")
-        print(f"Path: {kb.path}")
-
-        kb.leave_header_node("header1_link", "header1_name")
-        print("\nAfter leave_header_node:")
-        print(f"Path: {kb.path}")
-
-        kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, {"data":"header2_data"})
-        kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, {"data":"info2_data"})
-        kb.leave_header_node("header2_link", "header2_name")
-        print("\nAfter adding and leaving another header node:")
-        print(f"Path: {kb.path}")
-
-        print("Initial state:")
-        print(f"Path: {kb.path}")
-        kb.add_kb("kb2", "Second knowledge base")
-        kb.select_kb("kb2")
-        kb.add_header_node("header1_link", "header1_name", {"prop1": "val1"}, {"data":"header1_data"})
-        print("\nAfter add_header_node:")
-        print(f"Path: {kb.path}")
-        
-        kb.add_info_node( "info1_link", "info1_name", {"prop2": "val2"}, {"data":"info1_data"})
-        kb.add_link_node("kb1", "kb1.header1_link.header1_name.info1_link.info1_name")
-        print("\nAfter add_info_node:")
-        print(f"Path: {kb.path}")
-
-        kb.leave_header_node("header1_link", "header1_name")
-        print("\nAfter leave_header_node:")
-        print(f"Path: {kb.path}")
-
-        kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, {"data":"header2_data"})
-        kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, {"data":"info2_data"})
-        kb.leave_header_node("header2_link", "header2_name")
-        print("\nAfter adding and leaving another header node:")
-        print(f"Path: {kb.path}")
+    kb.leave_header_node("header1_link", "header1_name")
+   
+    kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, {"data":"header2_data"})
+    kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, {"data":"info2_data"})
+    kb.add_link_node("link1")
+    kb.leave_header_node("header2_link", "header2_name")
+   
 
 
-        # Example of check_installation
-        try:
-            kb.check_installation()
-            kb._disconnect()
-        except RuntimeError as e:
-            print(f"Error during installation check: {e}")
+    # Example of check_installation
+    try:
+        kb.check_installation()
+        kb.disconnect()
+    except RuntimeError as e:
+        print(f"Error during installation check: {e}")
+    print("ending unit test")
 

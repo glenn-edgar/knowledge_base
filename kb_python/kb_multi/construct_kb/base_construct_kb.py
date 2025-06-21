@@ -15,19 +15,13 @@ class KnowledgeBaseManager:
                              (host, database, user, password, port)
         """
         self.connection_params = connection_params
-        self.conn = None
-        self.cursor = None
-        self.table_name = table_name
         
-    def __enter__(self):
-        """Context manager entry."""
+        self.table_name = table_name
         self._connect()
         self._create_tables()
-        return self
         
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self._disconnect()
+   
+ 
         
     def _connect(self):
         """Establish database connection."""
@@ -41,7 +35,7 @@ class KnowledgeBaseManager:
             print(f"Error connecting to database: {e}")
             raise
             
-    def _disconnect(self):
+    def disconnect(self):
         """Close database connection."""
         if self.cursor:
             self.cursor.close()
@@ -462,7 +456,6 @@ class KnowledgeBaseManager:
         
         
         try:
-            parent_path = parent_kb + "." + parent_path
            
             
             # Check if both knowledge bases exist
@@ -542,6 +535,8 @@ class KnowledgeBaseManager:
             RuntimeError: If database operations fail (insert/update failures)
             psycopg2.Error: If database connection/transaction fails
         """
+        
+        
         if not isinstance(knowledge_base, str):
             raise TypeError("knowledge_base must be a string")
         if not isinstance(path, str):
@@ -552,7 +547,7 @@ class KnowledgeBaseManager:
             raise TypeError("description must be a string")
         
         try:
-            path = knowledge_base + "." + path
+        
             # Step 1: Verify that knowledge_base exists in info table
             info_check_query = sql.SQL("""
                 SELECT knowledge_base FROM {} WHERE knowledge_base = %s
@@ -645,24 +640,25 @@ if __name__ == "__main__":
     }
     
     # Using context manager
-    with KnowledgeBaseManager('knowledge_base', conn_params) as kb_manager:
-        # Create tables
-        print("starting unit test")
-        
-        # Add knowledge bases
-        kb_manager.add_kb( 'kb1', 'First knowledge base')
-        kb_manager.add_kb('kb2', 'Second knowledge base')
-        
-        # Add nodes
-        kb_manager.add_node( 'kb1', 'person', 'John Doe',
-                           {'age': 30}, {'email': 'john@example.com'}, 'people.john')
-        kb_manager.add_node('kb2', 'person', 'Jane Smith',
-                           {'age': 25}, {'email': 'jane@example.com'}, 'people.jane')
-        
-        
-        kb_manager.add_link_mount('kb1', 'people.john', 'link1', 'link1 description')
-        
-        # Add link
-        kb_manager.add_link( 'kb1', 'people.john','link1')
-        print("ending unit test")
+    kb_manager = KnowledgeBaseManager('knowledge_base', conn_params)
+    # Create tables
+    print("starting unit test")
+    
+    # Add knowledge bases
+    kb_manager.add_kb( 'kb1', 'First knowledge base')
+    kb_manager.add_kb('kb2', 'Second knowledge base')
+    
+    # Add nodes
+    kb_manager.add_node( 'kb1', 'person', 'John Doe',
+                        {'age': 30}, {'email': 'john@example.com'}, 'people.john')
+    kb_manager.add_node('kb2', 'person', 'Jane Smith',
+                        {'age': 25}, {'email': 'jane@example.com'}, 'people.jane')
+    
+    
+    kb_manager.add_link_mount('kb1', 'people.john', 'link1', 'link1 description')
+    
+    # Add link
+    kb_manager.add_link( 'kb1', 'people.john','link1')
+    kb_manager.disconnect()
+    print("ending unit test")
 

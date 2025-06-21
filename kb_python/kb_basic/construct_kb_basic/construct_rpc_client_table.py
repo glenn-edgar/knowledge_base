@@ -19,18 +19,19 @@ class Construct_RPC_Client_Table:
     def _setup_schema(self):
         """
         Sets up the database schema (tables, functions, etc.).
-   
+
         # Use psycopg2.sql module to construct SQL queries safely. This prevents SQL injection.
         # ltree extension needs to be created.
         """
+        # Create extensions
         create_extensions_script = sql.SQL("""
             CREATE EXTENSION IF NOT EXISTS ltree;
         """)
+        self.cursor.execute(create_extensions_script)
         
-        # Create the knowledge_base table
+        # Create the RPC client table
         create_table_script = sql.SQL("""
-             CREATE SCHEMA IF NOT EXISTS rpc_client_table;
-             CREATE TABLE  IF NOT EXISTS  rpc_client_table.rpc_client_table (
+            CREATE TABLE IF NOT EXISTS {table_name} (
                 id SERIAL PRIMARY KEY,
                 
                 -- Reference to the request
@@ -49,13 +50,12 @@ class Construct_RPC_Client_Table:
                 
                 -- Boolean to identify new/unprocessed results
                 is_new_result BOOLEAN NOT NULL DEFAULT FALSE
-                
-              
             );
-        """)
+        """).format(table_name=sql.Identifier(self.table_name))
+        
         self.cursor.execute(create_table_script)
         self.conn.commit()  # Commit the changes
-        print("rpc_client table created.")
+        print(f"RPC client table '{self.table_name}' created.")
 
     def add_rpc_client_field(self, rpc_client_key,queue_depth, description):
         """
@@ -120,13 +120,15 @@ class Construct_RPC_Client_Table:
                 """, args)
             
             # Delete records where path is not in our temp table
-            self.cursor.execute("""
-                DELETE FROM rpc_client_table.rpc_client_table
+            delete_query = sql.SQL("""
+                DELETE FROM {table_name}
                 WHERE client_path::text NOT IN (
                     SELECT path FROM valid_paths
                 )
                 RETURNING id
-            """)
+            """).format(table_name=sql.Identifier(self.table_name))
+            
+            self.cursor.execute(delete_query)
             
             # Get count of deleted records
             deleted_count = len(self.cursor.fetchall())
@@ -139,7 +141,7 @@ class Construct_RPC_Client_Table:
         except Exception as e:
             # Roll back in case of error
             self.conn.rollback()
-            raise Exception(f"Error removing unspecified entries: {str(e)}")
+            raise e  # Re-raise the exception after rollback
         
     def adjust_queue_length(self, specified_client_paths, specified_queue_lengths):
         """
