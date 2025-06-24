@@ -14,6 +14,7 @@ class Construct_Status_Table:
         self.cursor = cursor
         self.construct_kb = construct_kb
         self.database = database
+        self.table_name = self.database + "_status"
         print(f"database: {self.database}")
        
         self._setup_schema()
@@ -32,15 +33,17 @@ class Construct_Status_Table:
         self.cursor.execute(create_extensions_script)
         
         # Create the table with dynamic name
-        table_name = self.database + "_status"
-        self.table_name = table_name
+        query = sql.SQL("DROP TABLE IF EXISTS {table_name} CASCADE").format(
+            table_name=sql.Identifier(self.table_name)
+        )
+        self.cursor.execute(query)
         create_table_script = sql.SQL("""
-            CREATE TABLE IF NOT EXISTS {table_name} (
+            CREATE TABLE  {table_name} (
                 id SERIAL PRIMARY KEY,
                 data JSON,
                 path LTREE UNIQUE
             );
-        """).format(table_name=sql.Identifier(table_name))
+        """).format(table_name=sql.Identifier(self.table_name))
         
         self.cursor.execute(create_table_script)
         
@@ -51,8 +54,8 @@ class Construct_Status_Table:
         create_path_index = sql.SQL("""
             CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} USING GIST (path);
         """).format(
-            index_name=sql.Identifier(f"idx_{table_name}_path_gist"),
-            table_name=sql.Identifier(table_name)
+            index_name=sql.Identifier(f"idx_{self.table_name}_path_gist"),
+            table_name=sql.Identifier(self.table_name)
         )
         self.cursor.execute(create_path_index)
         
@@ -61,13 +64,13 @@ class Construct_Status_Table:
         create_path_btree_index = sql.SQL("""
             CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} (path);
         """).format(
-            index_name=sql.Identifier(f"idx_{table_name}_path_btree"),
-            table_name=sql.Identifier(table_name)
+            index_name=sql.Identifier(f"idx_{self.table_name}_path_btree"),
+            table_name=sql.Identifier(self.table_name)
         )
         self.cursor.execute(create_path_btree_index)
         
         self.conn.commit()  # Commit all changes
-        print(f"Status table '{table_name}' created with optimized indexes.")
+        print(f"Status table '{self.table_name}' created with optimized indexes.")
 
     def add_status_field(self, status_key, properties, description,initial_data):
         """

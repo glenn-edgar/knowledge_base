@@ -94,6 +94,7 @@ class Construct_KB(KnowledgeBaseManager):
         self.path[self.working_kb].append(link)
         self.path[self.working_kb].append(node_name)
         node_path = ".".join(self.path[self.working_kb])
+        
 
         if node_path in self.path_values[self.working_kb]:
             raise ValueError(f"Path {node_path} already exists in knowledge base")
@@ -101,6 +102,7 @@ class Construct_KB(KnowledgeBaseManager):
         self.path_values[self.working_kb][node_path] = True
        
         path = ".".join(self.path[self.working_kb])
+        print("path", path)
         KnowledgeBaseManager.add_node(self, self.working_kb, link, node_name, node_properties, node_data,path)
        
 
@@ -146,10 +148,10 @@ class Construct_KB(KnowledgeBaseManager):
         
         
     def add_link_node(self,link_name):
-        KnowledgeBaseManager.add_link(self, self.working_kb,self.working_kb + "." + ".".join(self.path[self.working_kb]), link_name)
+        KnowledgeBaseManager.add_link(self, self.working_kb,".".join(self.path[self.working_kb]), link_name)
    
-    def add_link_mount(self, child_kb, child_path, link_mount_name, description = ""):
-        KnowledgeBaseManager.add_link_mount(self, self.working_kb,self.working_kb + "." + ".".join(self.path[self.working_kb]), 
+    def add_link_mount(self, link_mount_name, description = ""):
+        KnowledgeBaseManager.add_link_mount(self, self.working_kb,".".join(self.path[self.working_kb]), 
                                             link_mount_name, description)
     
     def check_installation(self):
@@ -199,7 +201,7 @@ if __name__ == '__main__':
  
     kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, {"data":"header2_data"})
     kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, {"data":"info2_data"})
-    kb.add_link_mount("kb1", "header2_link.header2_name", "link1", "link1 description")
+    kb.add_link_mount( "link1", "link1 description")
     kb.leave_header_node("header2_link", "header2_name")
   
     kb.add_kb("kb2", "Second knowledge base")

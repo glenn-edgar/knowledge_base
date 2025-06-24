@@ -407,7 +407,7 @@ class KnowledgeBaseManager:
                 raise ValueError(f"Knowledge base '{kb_name}' not found in info table")
             
             # Prepend kb_name to path to ensure uniqueness
-            full_path = f"{kb_name}.{path}" if path else kb_name
+            full_path = path
             
             
             # Convert dictionaries to JSON strings

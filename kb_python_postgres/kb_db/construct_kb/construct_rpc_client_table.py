@@ -1,5 +1,6 @@
 import psycopg2
 import json
+import uuid
 from psycopg2 import sql
 from psycopg2.extensions import adapt
 
@@ -28,10 +29,13 @@ class Construct_RPC_Client_Table:
         create_extensions_script = sql.SQL("""
             CREATE EXTENSION IF NOT EXISTS ltree;
         """)
-        
+        query = sql.SQL("DROP TABLE IF EXISTS {table_name} CASCADE").format(
+            table_name=sql.Identifier(self.table_name)
+        )
+        self.cursor.execute(query)
         # Create the knowledge_base table
         create_table_script = sql.SQL("""
-             CREATE TABLE  IF NOT EXISTS  {table_name} (
+             CREATE TABLE   {table_name} (
                 id SERIAL PRIMARY KEY,
                 
                 -- Reference to the request
@@ -193,50 +197,72 @@ class Construct_RPC_Client_Table:
             raise ValueError("The specified_client_paths and specified_queue_lengths lists must be of equal length")
         
         results = {}
+        table_ident = sql.Identifier(*self.table_name.split('.'))  # supports schema-qualified table names
         
-        # Process each client path with its corresponding queue length
         for i, client_path in enumerate(specified_client_paths):
             queue_length = specified_queue_lengths[i]
             
-            # Skip invalid queue lengths
             if queue_length < 0:
                 results[client_path] = {"error": "Invalid queue length (negative)"}
                 continue
-                
-            # Get current count of records for this client path
+            
+            # Count current records
             count_query = sql.SQL("""
                 SELECT COUNT(*) 
-                FROM {table_name} 
+                FROM {table}
                 WHERE client_path = %s::ltree
-            """).format(table_name=sql.Identifier(self.table_name))
+            """).format(table=table_ident)
             
             self.cursor.execute(count_query, (client_path,))
             current_count = self.cursor.fetchone()[0]
             
             path_result = {'added': 0, 'removed': 0}
             
-            # If we need to remove records (current count exceeds specified length)
+            # Remove excess records
             if current_count > queue_length:
                 records_to_remove = current_count - queue_length
-                
-                # Remove oldest records (based on response_timestamp)
                 delete_query = sql.SQL("""
-                    DELETE FROM {table_name}
+                    DELETE FROM {table}
                     WHERE id IN (
                         SELECT id
-                        FROM {table_name}
+                        FROM {table}
                         WHERE client_path = %s::ltree
                         ORDER BY response_timestamp ASC
                         LIMIT %s
                     )
                     RETURNING id
-                """).format(table_name=sql.Identifier(self.table_name))
-                
+                """).format(table=table_ident)
+
                 self.cursor.execute(delete_query, (client_path, records_to_remove))
                 path_result['removed'] = len(self.cursor.fetchall())
             
-            # If we need to add records (current count i
+            # Add missing records
+            elif current_count < queue_length:
+                records_to_add = queue_length - current_count
+                insert_query = sql.SQL("""
+                    INSERT INTO {table} (
+                        request_id, client_path, server_path,
+                        transaction_tag, rpc_action,
+                        response_payload, response_timestamp, is_new_result
+                    )
+                    VALUES (%s, %s::ltree, %s::ltree, %s, %s, %s::jsonb, NOW(), FALSE)
+                """).format(table=table_ident)
+
+                for _ in range(records_to_add):
+                    self.cursor.execute(insert_query, (
+                        str(uuid.uuid4()),
+                        client_path,
+                        client_path,              # default server_path = client_path
+                        'none',                   # default transaction_tag
+                        'none',                   # default rpc_action
+                        json.dumps({})            # empty JSONB payload
+                    ))
+                    path_result['added'] += 1
             
+            results[client_path] = path_result
+
+        return results
+                
     def restore_default_values(self):
         """
         Restore default values for all fields in rpc_client_table except for client_path.
@@ -277,7 +303,7 @@ class Construct_RPC_Client_Table:
         return updated_count
             
     def check_installation(self):     
-
+        
         try:
             query = sql.SQL("""
             SELECT path, properties FROM {table_name} 
@@ -289,12 +315,14 @@ class Construct_RPC_Client_Table:
             
             paths = []
             lengths = []
+            print("specified_paths_data", specified_paths_data)
+            
             for row in specified_paths_data:
                 paths.append(row[0])
                 properties = row[1]
                 lengths.append(properties['queue_depth'])
             # Create a dictionary with path as key and other fields as a nested dictionary
-        
+            
         except Exception as e:
             raise Exception(f"Error retrieving knowledge base fields: {str(e)}")
         

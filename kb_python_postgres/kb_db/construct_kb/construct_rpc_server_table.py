@@ -26,10 +26,13 @@ class Construct_RPC_Server_Table:
         # Use psycopg2.sql module to construct SQL queries safely. This prevents SQL injection.
         # ltree extension needs to be created.
         """
-    
+        query = sql.SQL("DROP TABLE IF EXISTS {table_name} CASCADE").format(
+            table_name=sql.Identifier(self.table_name)
+        )
+        self.cursor.execute(query)
         # Create the knowledge_base table
         create_table_script = sql.SQL("""
-        CREATE TABLE IF NOT EXISTS {table_name} (
+        CREATE TABLE  {table_name} (
             id SERIAL PRIMARY KEY,
             server_path LTREE NOT NULL,
             

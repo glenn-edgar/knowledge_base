@@ -27,14 +27,23 @@ class Construct_Stream_Table:
         create_extensions_script = sql.SQL("""
             CREATE EXTENSION IF NOT EXISTS ltree;
         """)
+        query = sql.SQL("DROP TABLE IF EXISTS {table_name} CASCADE").format(
+            table_name=sql.Identifier(self.table_name)
+        )
+        self.cursor.execute(query)
         self.cursor.execute(create_extensions_script)
+        query = sql.SQL("DROP TABLE IF EXISTS {table_name} CASCADE").format(
+            table_name=sql.Identifier(self.table_name)
+        )
+        self.cursor.execute(query)
         
         # Create the stream table
         create_table_script = sql.SQL("""
-            CREATE TABLE IF NOT EXISTS {table_name}(
+            CREATE TABLE  {table_name}(
                 id SERIAL PRIMARY KEY,
                 path LTREE,
                 recorded_at TIMESTAMPTZ DEFAULT NOW(),
+                valid BOOLEAN DEFAULT FALSE,
                 data JSONB
             );
         """).format(table_name=sql.Identifier(self.table_name))
@@ -168,35 +177,46 @@ class Construct_Stream_Table:
         for i in range(len(specified_stream_paths)):
             path = specified_stream_paths[i]
             target_length = specified_stream_length[i]
-            
-            # Get current count for this path
-            self.cursor.execute("SELECT COUNT(*) FROM stream_table.stream_table WHERE path = %s;", (path,))
+            print("target_length", target_length)
+            stream_field_prompt = sql.SQL("""
+                SELECT COUNT(*) FROM {table_name} WHERE path = {path};
+            """).format(table_name=sql.Identifier(self.table_name), path=sql.Literal(path))
+
+            self.cursor.execute(stream_field_prompt, (path,))
+  
             current_count = self.cursor.fetchone()[0]
             
             # Calculate the difference
             diff = target_length - current_count
-            
+           
             if diff < 0:
                 # Need to remove records (oldest first) for this path
-                self.cursor.execute("""
-                    DELETE FROM stream_table.stream_table
+                query = sql.SQL("""
+                    DELETE FROM {table}
                     WHERE path = %s AND recorded_at IN (
                         SELECT recorded_at 
-                        FROM stream_table.stream_table 
+                        FROM {table}
                         WHERE path = %s
                         ORDER BY recorded_at ASC 
                         LIMIT %s
                     );
-                """, (path, path, abs(diff)))
+                """).format(
+                    table=sql.Identifier(self.table_name)
+                )
+
+                # Execute the query with parameter bindings
+                self.cursor.execute(query, (path, path, abs(diff)))
                 
             elif diff > 0:
                 # Need to add records for this path
                 for _ in range(diff):
-                    self.cursor.execute("""
-                        INSERT INTO stream_table.stream_table (path, recorded_at, data)
-                        VALUES (%s, CURRENT_TIMESTAMP, '{}');
-                    """, (path,))
-        
+                    query = sql.SQL("""
+                        INSERT INTO {table_name} (path, recorded_at, data, valid)
+                        VALUES (%s, CURRENT_TIMESTAMP, %s, FALSE);
+                    """).format(table_name=sql.Identifier(self.table_name))
+
+                    self.cursor.execute(query, (path, '{}'))  # '{}' is passed as a string literal
+                        
         # Commit all changes at once
         self.conn.commit()
         
@@ -225,6 +245,7 @@ class Construct_Stream_Table:
         self.cursor.execute(knowledge_query)
         specified_stream_data = self.cursor.fetchall()
         print(f"specified_stream_data: {specified_stream_data}")
+    
         
         specified_stream_paths = [row[0] for row in specified_stream_data]
         specified_stream_length = [row[3]['stream_length'] for row in specified_stream_data]
@@ -233,6 +254,10 @@ class Construct_Stream_Table:
         
         invalid_stream_paths = [path for path in unique_stream_paths if path not in specified_stream_paths]
         missing_stream_paths = [path for path in specified_stream_paths if path not in unique_stream_paths]
-
+        print(f"invalid_stream_paths: {invalid_stream_paths}")
+        print(f"missing_stream_paths: {missing_stream_paths}")
+        
+        
         self._remove_invalid_stream_fields(invalid_stream_paths)
         self._manage_stream_table(specified_stream_paths, specified_stream_length)
+        

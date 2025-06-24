@@ -31,10 +31,13 @@ class Construct_Job_Table:
             CREATE EXTENSION IF NOT EXISTS ltree;
         """)
         self.cursor.execute(create_extensions_script)
-        
+        query = sql.SQL("DROP TABLE IF EXISTS {table_name} CASCADE").format(
+            table_name=sql.Identifier(self.table_name)
+        )
+        self.cursor.execute(query)
         # Create the job table with dynamic name
         create_table_script = sql.SQL("""
-            CREATE TABLE IF NOT EXISTS {table_name}(
+            CREATE TABLE  {table_name}(
                 id SERIAL PRIMARY KEY,
                 path LTREE,
                 schedule_at TIMESTAMPTZ DEFAULT NOW(),

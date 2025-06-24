@@ -77,7 +77,9 @@ class Construct_Data_Tables:
         self.kb.check_installation()
         self.status_table.check_installation()
         self.job_table.check_installation()
+      
         self.stream_table.check_installation()
+      
         self.rpc_client_table.check_installation()
         self.rpc_server_table.check_installation()
         
@@ -110,7 +112,7 @@ if __name__ == '__main__':
     kb.add_status_field("info2_status", {"prop3": "val3"},  "info2_status_description",{"prop3": "val3"})
     kb.add_status_field("info3_status", {"prop3": "val3"},  "info3_status_description",{"prop3": "val3"})
     kb.add_job_field("info1_job", 100, "info1_job_description")
-    kb.add_stream_field("info1_status",100, "info1_stream")
+    kb.add_stream_field("info1_stream",95, "info1_stream")
     kb.add_rpc_client_field("info1_client", 10,"info1_client_description")   
     kb.leave_header_node("header1_link", "header1_name")
     print("\nAfter leave_header_node:")
@@ -128,4 +130,80 @@ if __name__ == '__main__':
         kb.disconnect()
     except RuntimeError as e:
         print(f"Error during installation check: {e}")
+    exit()
+    kb = Construct_Data_Tables(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DATABASE)
 
+    print("Initial state:")
+    print(f"Path: {kb.path}")
+    kb.add_kb("kb1", "First knowledge base")
+    kb.select_kb("kb1")
+    kb.add_header_node("header1_link", "header1_name", {"prop1": "val1"}, {"data":"header1_data"})
+    print("\nAfter add_header_node:")
+    print(f"Path: {kb.path}")
+
+    kb.add_info_node("info1_link", "info1_name", {"prop2": "val2"}, {"data":"info1_data"})
+    print("\nAfter add_info_node:")
+    print(f"Path: {kb.path}")
+
+    kb.add_rpc_server_field("info1_server",25,"info1_server_data")
+    kb.add_status_field("info1_status", {"prop3": "val3"},  "info1_status_description",{"prop3": "val3"})
+    kb.add_status_field("info2_status", {"prop3": "val3"},  "info2_status_description",{"prop3": "val3"})
+    kb.add_status_field("info3_status", {"prop3": "val3"},  "info3_status_description",{"prop3": "val3"})
+   
+    kb.add_job_field("info2_job", 100, "info1_job_description")
+    kb.add_stream_field("info2_status",100, "info1_stream")
+    kb.add_rpc_client_field("info2_client", 10,"info1_client_description")   
+    kb.leave_header_node("header1_link", "header1_name")
+    print("\nAfter leave_header_node:")
+    print(f"Path: {kb.path}")
+
+    kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, {"data":"header2_data"})
+    kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, {"data":"info2_data"})
+    kb.leave_header_node("header2_link", "header2_name")
+    print("\nAfter adding and leaving another header node:")
+    print(f"Path: {kb.path}")
+
+    # Example of check_installation
+    try:
+        kb.check_installation()
+        kb.disconnect()
+    except RuntimeError as e:
+        print(f"Error during installation check: {e}")
+    exit()
+    
+    # teests for complete testinge
+    kb = Construct_Data_Tables(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DATABASE)
+
+    print("Initial state:")
+    print(f"Path: {kb.path}")
+    kb.add_kb("kb1", "First knowledge base")
+    kb.select_kb("kb1")
+    kb.add_header_node("header1_link", "header1_name", {"prop1": "val1"}, {"data":"header1_data"})
+    print("\nAfter add_header_node:")
+    print(f"Path: {kb.path}")
+
+    kb.add_info_node("info1_link", "info1_name", {"prop2": "val2"}, {"data":"info1_data"})
+    print("\nAfter add_info_node:")
+    print(f"Path: {kb.path}")
+
+    kb.add_rpc_server_field("info1_server",25,"info1_server_data")
+   
+    kb.add_job_field("info1_job", 50, "info1_job_description")
+    kb.add_stream_field("info1_status",50, "info1_stream")
+    kb.add_rpc_client_field("info1_client", 5,"info1_client_description")   
+    kb.leave_header_node("header1_link", "header1_name")
+    print("\nAfter leave_header_node:")
+    print(f"Path: {kb.path}")
+
+    kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, {"data":"header2_data"})
+    kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, {"data":"info2_data"})
+    kb.leave_header_node("header2_link", "header2_name")
+    print("\nAfter adding and leaving another header node:")
+    print(f"Path: {kb.path}")
+
+    # Example of check_installation
+    try:
+        kb.check_installation()
+        kb.disconnect()
+    except RuntimeError as e:
+        print(f"Error during installation check: {e}")
