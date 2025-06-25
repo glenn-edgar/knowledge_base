@@ -28,6 +28,8 @@ class KB_Search:
         self.user = user
         self.password = password
         self.base_table = database
+        self.link_table = self.base_table + "_link"
+        self.link_mount_table = self.base_table + "_link_mount"
         self.filters = []
         self.results = None
         self.path_values = {}
@@ -153,6 +155,15 @@ class KB_Search:
             "params": {"json_object": psycopg2.extras.Json(json_object)}
         })
     
+    def search_starting_path(self, starting_path):
+        """
+        Add a filter to search for rows matching all descendants of the specified starting path.
+        """
+        self.filters.append({
+            "condition": "path <@ %(starting_path)s",
+            "params": {"starting_path": starting_path}
+        })
+    
     def search_path(self, path_expression):
         """
         Add a filter to search for rows matching the specified LTREE path expression.
@@ -169,6 +180,25 @@ class KB_Search:
         self.filters.append({
             "condition": "path ~ %(path_expr)s",
             "params": {"path_expr": path_expression}
+        })
+    
+    def search_has_link(self):
+        """
+        Add a filter to search for rows where the has_link field is TRUE.
+        """
+        self.filters.append({
+            "condition": "has_link = TRUE",
+            "params": {}
+        })
+    
+    def search_has_link_mount(self):
+    
+        """
+        Add a filter to search for rows where the has_link_mount field is TRUE.
+        """
+        self.filters.append({
+            "condition": "has_link_mount = TRUE",
+            "params": {}
         })
     
     def execute_query(self):
@@ -370,45 +400,59 @@ class KB_Search:
             # Handle errors gracefully
             raise Exception(f"Error retrieving data for paths: {str(e)}")
 
-# Example usage:
-if __name__ == "__main__":
-    # Create a new KB_Search instance
-    kb_search = KB_Search(
-        dbname="knowledge_base",
-        user="gedgar",
-        password="ready2go",
-        host="localhost",
-        port="5432",
-        database="knowledge_base"
-    )
-    
-    try:
-        # Clear any existing filters
-        kb_search.clear_filters()
-        kb_search.search_kb("kb1")
-        kb_search.search_property_key('prop3')
-        kb_search.search_property_value('prop3', 'val3')
-        kb_search.search_name("info1_status")  
-        kb_search.search_label("KB_STATUS_FIELD")
-        kb_search.search_path("*.header1_link.header1_name.KB_STATUS_FIELD.info1_status")  
+    def decode_link_nodes(self, path):
+        """
+        Decode an ltree path into knowledge base name and node link/name pairs.
         
-        # Execute the query with all filters
-        results = kb_search.execute_query()
+        The path format is expected to be: kb.link1.name1.link2.name2.link3.name3...
+        where:
+        - kb: knowledge base identifier (first element)
+        - link/name pairs: alternating link identifiers and node names
         
-        if results:
-            print(f"Found {len(results)} matching rows:")
+        Args:
+            path (str): The ltree path to decode (e.g., 'kb_main.uuid1.node1.uuid2.node2')
+        
+        Returns:
+            tuple: (kb_name, node_pairs)
+                - kb_name (str): The knowledge base identifier
+                - node_pairs (list): List of [node_link, node_name] pairs
+        
+        Raises:
+            ValueError: If path format is invalid (odd number of elements after kb)
             
-            for row in results:
-                print(f"ID: {row.get('id', 'N/A')}, Knowledge Base: {row.get('knowledge_base', 'N/A')}, Label: {row.get('label', 'N/A')}, Name: {row.get('name', 'N/A')}")
-                print(f"Properties: {row.get('properties', 'N/A')}")
-                print(f"Data: {row.get('data', 'N/A')}")
-                print(f"Path: {row.get('path', 'N/A')}")
-                print("---")
-        else:
-            print("No matching rows found.")
-            
-    except Exception as e:
-        print(f"Error during execution: {e}")
-    finally:
-        # Clean up
-        kb_search.disconnect()
+        Example:
+            >>> kb, nodes = self.decode_link_nodes('kb_main.uuid1.parent.uuid2.child')
+            >>> print(kb)  # 'kb_main'
+            >>> print(nodes)  # [['uuid1', 'parent'], ['uuid2', 'child']]
+        """
+        if not path or not isinstance(path, str):
+            raise ValueError("Path must be a non-empty string")
+        
+        path_parts = path.split('.')
+        
+        # Need at least kb name, and then pairs of (link, name)
+        # So minimum is 3 elements: kb.link.name
+        if len(path_parts) < 3:
+            raise ValueError(f"Path must have at least 3 elements (kb.link.name), got {len(path_parts)}")
+        
+        # After removing kb (first element), remaining elements should be even
+        # (pairs of link and name)
+        remaining_parts = len(path_parts) - 1
+        if remaining_parts % 2 != 0:
+            raise ValueError(f"Bad path format: after kb identifier, must have even number of elements (link/name pairs), got {remaining_parts} elements")
+        
+        # Extract knowledge base name (first element)
+        kb = path_parts[0]
+        
+        # Initialize result list for node pairs
+        result = []
+        
+        # Process pairs of (node_link, node_name) starting from index 1
+        for i in range(1, len(path_parts), 2):
+            node_link = path_parts[i]
+            node_name = path_parts[i + 1]
+            result.append([node_link, node_name])
+        
+        return kb, result
+
+

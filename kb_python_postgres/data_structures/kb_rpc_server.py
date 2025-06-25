@@ -124,9 +124,11 @@ class KB_RPC_Server:
         """
         Count all records in the table where server_path matches.
         """
-        print("empty jobs", self.count_empty_jobs(server_path))
-        print("new jobs", self.count_new_jobs(server_path))
-        print("processing jobs", self.count_processing_jobs(server_path))
+        return_value = {}
+        return_value["empty_jobs"] = self.count_empty_jobs(server_path)
+        return_value["new_jobs"] = self.count_new_jobs(server_path)
+        return_value["processing_jobs"] = self.count_processing_jobs(server_path)
+        return return_value
       
     
  
@@ -534,7 +536,7 @@ class KB_RPC_Server:
         retry_count = 0
         row_count = 0
         original_autocommit = self.conn.autocommit
-        print("table", self.base_table)
+        
         while retry_count < max_retries:
             try:
                 if self.conn.status == psycopg2.extensions.STATUS_IN_TRANSACTION:

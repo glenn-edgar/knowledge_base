@@ -8,6 +8,8 @@ from kb_job_table import KB_Job_Queue
 from kb_stream import KB_Stream
 from kb_rpc_client import KB_RPC_Client
 from kb_rpc_server import KB_RPC_Server
+from kb_link_table import KB_Link_Table
+from kb_link_mount_table import KB_Link_Mount_Table
 
 class KB_Data_Structures:
     """
@@ -20,10 +22,15 @@ class KB_Data_Structures:
         self.search_name = self.query_support.search_name
         self.search_property_key = self.query_support.search_property_key
         self.search_property_value = self.query_support.search_property_value
+        self.search_has_link = self.query_support.search_has_link
+        self.search_has_link_mount = self.query_support.search_has_link_mount
         self.search_path = self.query_support.search_path
+        self.search_starting_path = self.query_support.search_starting_path
+        self.execute_kb_search = self.query_support.execute_query
         self.find_description = self.query_support.find_description
         self.find_description_paths = self.query_support.find_description_paths
         self.find_path_values = self.query_support.find_path_values
+        self.decode_link_nodes = self.query_support.decode_link_nodes
 
         self.status_data = KB_Status_Data(self.query_support, database)
         self.find_status_node_ids = self.status_data.find_node_ids
@@ -87,6 +94,20 @@ class KB_Data_Structures:
         self.rpc_server_mark_job_completion  = self.rpc_server.mark_job_completion
         self.rpc_server_clear_server_queue = self.rpc_server.clear_server_queue
         
+        self.link_table = KB_Link_Table(self.query_support.conn, self.query_support.cursor, database)
+        self.link_table_find_records_by_link_name = self.link_table.find_records_by_link_name
+        self.link_table_find_records_by_node_path = self.link_table.find_records_by_node_path
+        self.link_table_find_all_link_names = self.link_table.find_all_link_names
+        self.link_table_find_all_node_names = self.link_table.find_all_node_names
+        
+        
+        self.link_mount_table = KB_Link_Mount_Table(self.query_support.conn, self.query_support.cursor, database)
+        self.link_mount_table_find_records_by_link_name = self.link_mount_table.find_records_by_link_name
+        self.link_mount_table_find_records_by_mount_path = self.link_mount_table.find_records_by_mount_path
+        self.link_mount_table_find_all_link_names = self.link_mount_table.find_all_link_names
+        self.link_mount_table_find_all_mount_paths = self.link_mount_table.find_all_mount_paths
+    
+        
 
 # Example usage:
 if __name__ == "__main__":
@@ -141,13 +162,13 @@ if __name__ == "__main__":
         id1 = job_data_1['id']
         print("id1", id1)
         self.rpc_server_mark_job_completion(server_path, id1)
-        self.rpc_server_count_all_jobs(server_path)
+        print("count_all_jobs", self.rpc_server_count_all_jobs(server_path))
         id2 = job_data_2['id']
         self.rpc_server_mark_job_completion(server_path, id2)
-        self.rpc_server_count_all_jobs(server_path)
+        print("count_all_jobs", self.rpc_server_count_all_jobs(server_path))
         id3 = job_data_3['id']
         self.rpc_server_mark_job_completion(server_path, id3)
-        self.rpc_server_count_all_jobs(server_path)
+        print("count_all_jobs", self.rpc_server_count_all_jobs(server_path))
         
 
     def test_client_queue(self, client_path):
@@ -480,5 +501,65 @@ if __name__ == "__main__":
     print("server_descriptions", server_descriptions)    
     
     test_server_functions(kb_data_structures, server_keys[0])
+    
+    """
+    Link Tables
+    """
+    print("--------------------------------search_starting_path--------------------------------")
+    kb_data_structures.clear_filters()
+    kb_data_structures.search_starting_path("kb1.header1_link.header1_name")
+    results = kb_data_structures.execute_kb_search()
+    print("------------------results", results)
+    kb_data_structures.clear_filters()
+    kb_data_structures.search_starting_path("kb1.header1_link.header1_name.KB_LINK_NODE.info1_link_mount")
+    results = kb_data_structures.execute_kb_search()
+    print("------------------results", results)
+    kb_data_structures.clear_filters()
+    kb_data_structures.search_starting_path("kb1")
+    results = kb_data_structures.execute_kb_search()
+    print("------------------results", results)
+    print("--------------------------------decode_link_nodes--------------------------------")
+    for data in results:
+        path = data['path']
+        print(kb_data_structures.decode_link_nodes(path))
+  
+    print("***************************  Link Tables ***************************")
+    kb_data_structures.clear_filters()
+    kb_data_structures.search_has_link()
+    results = kb_data_structures.execute_kb_search()
+    print("results", results)
+    
+    
+    
+   
+    print("--------------------------------link_mount_table--------------------------------")
+    kb_data_structures.clear_filters()
+    kb_data_structures.search_has_link_mount()
+    results = kb_data_structures.execute_kb_search()
+    print("results", results)
+    kb_data_structures.clear_filters()
+    
+    print("--------------------------------link_table db --------------------------------")
+    names = kb_data_structures.link_table_find_all_link_names()
+    print("find_all_link_names", names)
+    mounts = kb_data_structures.link_table_find_all_node_names()
+    print("find_all_node_names", mounts)
+    print("find_records_by_link_name", kb_data_structures.link_table_find_records_by_link_name(names[0]))
+    print("find_records_by_link_name", kb_data_structures.link_table_find_records_by_link_name(names[0], kb="kb1"))
+    print("find_records_by_node_path", kb_data_structures.link_table_find_records_by_node_path(mounts[0]))
+    print("find_records_by_node_path", kb_data_structures.link_table_find_records_by_node_path(mounts[0], kb="kb1"))
+    
+    print("--------------------------------link_mount_table db --------------------------------")
+    names = kb_data_structures.link_mount_table_find_all_link_names()
+    print("find_all_link_names", names)
+    mounts = kb_data_structures.link_mount_table_find_all_mount_paths()
+    print("find_all_mount_points", mounts)
+    print("find_records_by_link_name", kb_data_structures.link_mount_table_find_records_by_link_name(names[0]))
+    print("find_records_by_link_name", kb_data_structures.link_mount_table_find_records_by_link_name(names[0], kb="kb1"))
+    print("find_records_by_mount_path", kb_data_structures.link_mount_table_find_records_by_mount_path(mounts[0]))
+    print("find_records_by_mount_path", kb_data_structures.link_mount_table_find_records_by_mount_path(mounts[0], kb="kb1"))
+    
+    
+    
     
     kb_data_structures.query_support.disconnect()

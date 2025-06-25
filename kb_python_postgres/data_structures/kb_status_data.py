@@ -37,7 +37,7 @@ class KB_Status_Data:
         Raises:
             ValueError: If no node or multiple nodes found
         """
-        print(f"Searching for single node: kb={kb},  name={node_name}, properties={properties}, path={node_path}")
+        
         
         results = self.find_node_ids(kb, node_name, properties, node_path)
         
@@ -64,7 +64,7 @@ class KB_Status_Data:
         Raises:
             ValueError: If no nodes found
         """
-        print(f"Searching for nodes: kb={kb}, name={node_name}, properties={properties}, path={node_path}")
+        
         
         try:
             # Clear previous filters and build new query
@@ -418,51 +418,3 @@ class KB_Status_Data:
         raise Exception(error_msg)
     
   
-# Example usage:
-if __name__ == "__main__":
-    from kb_search_corrected import KB_Search  # Import the corrected KB_Search class
-    
-    # Create KB_Search instance
-    kb_search = KB_Search(
-        dbname="knowledge_base",
-        user="gedgar",
-        password="ready2go", 
-        host="localhost",
-        port="5432",
-        database="knowledge_base"
-    )
-    
-    # Create KB_Status_Data instance
-    status_data = KB_Status_Data(kb_search, "my_project")
-    
-    try:
-        # Example: Find nodes
-        nodes = status_data.find_node_ids(
-            kb="kb1",
-            node_name="info1_status",
-            properties={"prop3": "val3"}
-        )
-        print(f"Found {len(nodes)} nodes")
-        
-        # Example: Set status data
-        test_data = {"status": "active", "last_updated": "2025-06-21"}
-        success, message = status_data.set_status_data("test.path.1", test_data)
-        print(f"Set data result: {success}, {message}")
-        
-        # Example: Get status data
-        retrieved_data, path = status_data.get_status_data("test.path.1")
-        print(f"Retrieved data for {path}: {retrieved_data}")
-        
-        # Example: Bulk operations
-        bulk_data = {
-            "test.path.2": {"status": "pending", "priority": "high"},
-            "test.path.3": {"status": "completed", "priority": "low"}
-        }
-        success, message, results = status_data.set_multiple_status_data(bulk_data)
-        print(f"Bulk operation: {success}, {message}")
-        print(f"Results: {results}")
-        
-    except Exception as e:
-        print(f"Error during example execution: {e}")
-    finally:
-        kb_search.disconnect()

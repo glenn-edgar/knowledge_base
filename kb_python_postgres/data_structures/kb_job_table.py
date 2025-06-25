@@ -79,7 +79,7 @@ class KB_Job_Queue:
         Raises:
             ValueError: If no job or multiple jobs found
         """
-        print(f"Searching for single job: name={node_name}, properties={properties}, path={node_path}")
+        
         
         results = self.find_job_ids(kb, node_name, properties, node_path)
         
@@ -105,7 +105,7 @@ class KB_Job_Queue:
         Raises:
             ValueError: If no jobs found
         """
-        print(f"Searching for jobs: name={node_name}, properties={properties}, path={node_path}")
+    
         
         try:
             # Clear previous filters and build new query
@@ -632,11 +632,8 @@ class KB_Job_Queue:
             
             error_msg = f"Error in clear_job_queue for path '{path}': {str(e)}"
             print(error_msg)
-            return {
-                'success': False,
-                'cleared_count': 0,
-                'error': error_msg
-            }
+            raise Exception(error_msg)
+            
     
     def get_job_statistics(self, path):
         """

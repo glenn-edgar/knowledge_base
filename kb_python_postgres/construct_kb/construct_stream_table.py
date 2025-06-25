@@ -119,7 +119,7 @@ class Construct_Stream_Table:
         # Add the node to the knowledge base
         self.construct_kb.add_info_node("KB_STREAM_FIELD", stream_key, properties, {},description)
         
-        print(f"Added stream field '{stream_key}' with properties: {properties} ")
+        
         
         return {
             "stream": "success",
@@ -177,7 +177,7 @@ class Construct_Stream_Table:
         for i in range(len(specified_stream_paths)):
             path = specified_stream_paths[i]
             target_length = specified_stream_length[i]
-            print("target_length", target_length)
+            
             stream_field_prompt = sql.SQL("""
                 SELECT COUNT(*) FROM {table_name} WHERE path = {path};
             """).format(table_name=sql.Identifier(self.table_name), path=sql.Literal(path))
@@ -234,7 +234,7 @@ class Construct_Stream_Table:
         
         self.cursor.execute(stream_paths_query)
         unique_stream_paths = [row[0] for row in self.cursor.fetchall()]
-        print(f"unique_stream_paths: {unique_stream_paths}")
+        
         
         # Get specified paths (paths with label "KB_STREAM_FIELD") from knowledge_table
         knowledge_query = sql.SQL("""
@@ -244,7 +244,7 @@ class Construct_Stream_Table:
         
         self.cursor.execute(knowledge_query)
         specified_stream_data = self.cursor.fetchall()
-        print(f"specified_stream_data: {specified_stream_data}")
+        
     
         
         specified_stream_paths = [row[0] for row in specified_stream_data]

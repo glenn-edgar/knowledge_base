@@ -74,7 +74,7 @@ class KB_Stream:
         Raises:
             ValueError: If no node or multiple nodes found
         """
-        print(f"Searching for single stream node: name={node_name}, properties={properties}, path={node_path}")
+        
         
         results = self.find_stream_ids(kb, node_name, properties, node_path)
         
@@ -100,7 +100,7 @@ class KB_Stream:
         Raises:
             ValueError: If no nodes found
         """
-        print(f"Searching for stream nodes: name={node_name}, properties={properties}, path={node_path}")
+        
         
         try:
             # Clear previous filters and build new query
