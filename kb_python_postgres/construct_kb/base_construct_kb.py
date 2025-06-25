@@ -630,12 +630,13 @@ class KnowledgeBaseManager:
 
 # Example usage
 if __name__ == "__main__":
+    password = input("Enter PostgreSQL password: ")
     # Database connection parameters
     conn_params = {
         'host': 'localhost',
         'database': 'knowledge_base',
         'user': 'gedgar',
-        'password': 'ready2go',
+        'password': password,
         'port': 5432
     }
     

@@ -84,13 +84,14 @@ class Construct_Data_Tables:
         self.rpc_server_table.check_installation()
         
 if __name__ == '__main__':
+    password = input("Enter PostgreSQL password: ")
     # Example Usage
     # Replace with your actual database credentials
     DB_HOST = "localhost"
     DB_PORT = "5432"
     DB_NAME = "knowledge_base"
     DB_USER = "gedgar"
-    DB_PASSWORD = "ready2go"
+    DB_PASSWORD = password
     DATABASE = "knowledge_base"
 
     kb = Construct_Data_Tables(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DATABASE)

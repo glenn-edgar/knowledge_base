@@ -111,11 +111,12 @@ class KB_Data_Structures:
 
 # Example usage:
 if __name__ == "__main__":
+    password = input("Enter PostgreSQL password: ")
     # Create a new KB_Search instance
     kb_data_structures = KB_Data_Structures(
         dbname="knowledge_base",
         user="gedgar",
-        password="ready2go",
+        password=password,
         host="localhost",
         port="5432",
         database="knowledge_base"
