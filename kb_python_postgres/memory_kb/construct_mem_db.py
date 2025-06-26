@@ -182,7 +182,8 @@ if __name__ == '__main__':
     # Example of check_installation
     try:
         kb.check_installation()
-        kb.export_to_postgres(table_name='composite_memory_kb',create_table=True,clear_existing=True)
+        print(kb.export_to_postgres(table_name='composite_memory_kb',create_table=True,clear_existing=True))
+        print(kb.import_from_postgres(table_name='composite_memory_kb'))
     except RuntimeError as e:
         print(f"Error during installation check: {e}")
     print("ending unit test")

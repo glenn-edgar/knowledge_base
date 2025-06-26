@@ -35,7 +35,7 @@ class BasicConstructDB:
     Supports all PostgreSQL ltree operators and provides seamless import/export with PostgreSQL.
     """
     
-    def __init__(self,host,port,dbname,user,password,database):
+    def __init__(self,host,port,dbname,user,password,table_name):
         """Initialize the tree data storage system."""
         self.data: Dict[str, TreeNode] = {}
         self.kb_dict = {}
@@ -44,7 +44,7 @@ class BasicConstructDB:
         self.dbname = dbname
         self.user = user
         self.password = password
-        self.database = database
+        self.table_name = table_name
         self.connection_params = {
             'host': host,
             'port': port,
@@ -165,12 +165,17 @@ class BasicConstructDB:
     
     def _convert_simple_pattern(self, pattern: str) -> str:
         """Convert simple wildcard pattern to regex."""
-        result = re.escape(pattern)
+        
+        # First handle special sequences before escaping
+        parts = pattern.split('.*')
+        escaped_parts = [re.escape(part) for part in parts]
+        result = '.*'.join(escaped_parts)
+        
+        # Now handle other wildcards
         result = result.replace('\\*\\*', '.*')
         result = result.replace('\\*', '[^.]+')
         result = re.sub(r'\\{([^}]+)\\}', lambda m: f"({m.group(1).replace(',', '|')})", result)
         return f'^{result}$'
-    
     # Core ltree operators implementation
     def ltree_match(self, path: str, query: str) -> bool:
         """
@@ -181,6 +186,7 @@ class BasicConstructDB:
             query: The ltree query pattern
         """
         try:
+            
             regex_pattern = self._convert_ltree_query_to_regex(query)
             return bool(re.match(regex_pattern, path))
         except Exception:
@@ -397,6 +403,7 @@ class BasicConstructDB:
     def query(self, pattern: str) -> List[Dict[str, Any]]:
         """Query using ltree pattern matching (~)."""
         results = []
+        
         for path, node in self.data.items():
             if self.ltree_match(path, pattern):
                 results.append({
@@ -431,6 +438,7 @@ class BasicConstructDB:
             path1: First operand (for @>, <@ this is the reference path)
             path2: Second operand (for operators that need it)
         """
+        
         results = []
         
         if operator == '@>':  # ancestor-of
@@ -454,6 +462,7 @@ class BasicConstructDB:
                     })
         
         elif operator == '~':  # lquery match
+            
             return self.query(path1)
         
         elif operator == '@@':  # ltxtquery match
@@ -496,6 +505,7 @@ class BasicConstructDB:
                 })
         
         results.sort(key=lambda x: x['path'])
+        
         return results
     
     def query_subtree(self, path: str) -> List[Dict[str, Any]]:
@@ -698,7 +708,7 @@ class BasicConstructDB:
                 return exported_count
     
     def sync_with_postgres(self,
-                          table_name: str = 'tree_data',
+                          
                           direction: str = 'both') -> Dict[str, int]:
         """
         Synchronize data with PostgreSQL table.
@@ -715,13 +725,13 @@ class BasicConstructDB:
         
         if direction in ['import', 'both']:
             try:
-                stats['imported'] = self.import_from_postgres(table_name)
+                stats['imported'] = self.import_from_postgres(self.table_name)
             except Exception as e:
                 print(f"Import failed: {e}")
         
         if direction in ['export', 'both']:
             try:
-                stats['exported'] = self.export_to_postgres( table_name)
+                stats['exported'] = self.export_to_postgres(self.table_name)
             except Exception as e:
                 print(f"Export failed: {e}")
         
@@ -774,7 +784,7 @@ class BasicConstructDB:
 if __name__ == "__main__":
     password = input("Enter PostgreSQL password: ")
     # Initialize the enhanced tree storage system
-    tree = BasicConstructDB(host='localhost',port=5432,dbname='knowledge_base',user='gedgar',password=password,database='knowledge_base')
+    tree = BasicConstructDB(host='localhost',port=5432,dbname='knowledge_base',user='gedgar',password=password,table_name='knowledge_base')
     
     print("=== Full ltree-Compatible Tree Storage System ===")
     
@@ -942,15 +952,15 @@ if __name__ == "__main__":
    
     
     # Export to PostgreSQL")
-    exported = tree.export_to_postgres(table_name='memory_kb')
+    exported = tree.export_to_postgres()
     print(f'Exported {exported} records')
 
     print("  # Import from PostgreSQL")
-    imported = tree.import_from_postgres(table_name='memory_kb')
+    imported = tree.import_from_postgres()
     print(f'Imported {imported} records')
     
     # Bidirectional sync"
-    stats = tree.sync_with_postgres( direction='both',table_name='memory_kb')
+    stats = tree.sync_with_postgres( direction='both')
     print(f'Sync stats: {stats}')
     
     print(f"\n=== System Ready - {tree.size()} nodes loaded ===")
