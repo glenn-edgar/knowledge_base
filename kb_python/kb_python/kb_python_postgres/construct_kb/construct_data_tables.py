@@ -2,19 +2,6 @@ import psycopg2
 import json
 from psycopg2 import sql
 from psycopg2.extensions import adapt, AsIs
-from construct_kb import Construct_KB
-from construct_status_table import Construct_Status_Table
-from construct_job_table import Construct_Job_Table
-from construct_stream_table import Construct_Stream_Table
-from construct_rpc_client_table import Construct_RPC_Client_Table
-from construct_rpc_server_table import Construct_RPC_Server_Table
-
-from construct_kb import Construct_KB
-from construct_status_table import Construct_Status_Table
-from construct_job_table import Construct_Job_Table
-from construct_stream_table import Construct_Stream_Table
-from construct_rpc_client_table import Construct_RPC_Client_Table
-from construct_rpc_server_table import Construct_RPC_Server_Table
 
 from construct_kb import Construct_KB
 from construct_status_table import Construct_Status_Table
