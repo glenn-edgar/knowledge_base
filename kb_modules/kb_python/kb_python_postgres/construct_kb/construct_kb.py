@@ -182,9 +182,9 @@ if __name__ == '__main__':
     DB_PORT = "5432"
     DB_NAME = "knowledge_base"
     DB_USER = "gedgar"
-    DB_PASSWORD = "ready2go"
+    
     DB_TABLE = "knowledge_base"
-
+    DB_PASSWORD = input("Enter your password: ")
     print("starting unit test")
     kb = Construct_KB(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_TABLE )
 
