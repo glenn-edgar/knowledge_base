@@ -63,6 +63,7 @@ async function main() {
     const a = 'company.engineering.backend.api';
     const b = 'company.engineering.backend.database';
     console.log(`\nLowest common ancestor of "${a}" and "${b}":\n  `, tree.lca(a, b));
+    await tree.close();
 }
 main().catch(err => {
     console.error('Error in test driver:', err);

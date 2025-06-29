@@ -3,12 +3,19 @@
   "version": "1.0.0",
   "description": "TypeScript implementation of ConstructKB using pg",
   "main": "dist/testDriver.js",
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/basicTestDriver.js",
-    "dev": "ts-node-dev --respawn src/basicTestDriver.ts",
-    "test:data": "npm run build && node dist/basicTestDriver.js"
+ 
+    "scripts": {
+      "build": "tsc",
+      "start": "node dist/testConstructMemDb.js",
+      "dev:memdb": "ts-node-dev  --exit-child src/testConstructDb.ts",
+      "dev:search": "ts-node-dev  --exit-child src/testSearchMemDb.ts",
+      "test:memdb": "npm run build && node dist/testConstructDb.js",
+      "test:search": "npm run build && node dist/testSearchMemDb.js",
+     "dev:basic": "ts-node-dev --exit-child src/basicTestDriver.ts",
+    "test:basic": "npm run build && node dist/basicTestDriver.js"
+    
   },
+  
   "dependencies": {
     "luxon": "^3.6.1",
     "pg": "^8.10.0",

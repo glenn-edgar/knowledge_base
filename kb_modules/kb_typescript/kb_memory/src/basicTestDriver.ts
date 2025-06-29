@@ -73,6 +73,8 @@ async function main() {
     `\nLowest common ancestor of "${a}" and "${b}":\n  `,
     tree.lca(a, b)
   );
+
+  await tree.close()
 }
 
 main().catch(err => {
