@@ -3,36 +3,50 @@ package kb_construct_module
 
 import (
 	"fmt"
+	//"syscall"
 	"os"
 	"testing"
-
-	_ "github.com/lib/pq"
-	"kb_construct_module"
+	//"bufio"
+	//"strings"
+	//"github.com/lib/pq"
+	//"golang.org/x/term"
 )
+
 
 // TestKnowledgeBaseManager tests the core functionality of KnowledgeBaseManager.
 func TestKnowledgeBaseManager(t *testing.T) {
-	// Retrieve password from environment variable
-	password := os.Getenv("PG_PASSWORD")
+	var password string
+    // Force sync
+	password = os.Getenv("POSTGRES_PASSWORD")
 	if password == "" {
-		t.Fatal("PG_PASSWORD environment variable not set")
+		fmt.Printf("Set POSTGRES_PASSWORD in your environment\n")
+		os.Exit(1)
 	}
-
+	fmt.Println("password", password)
+   
+    
+    // Validate password
+   
+	fmt.Fprintln(os.Stderr, "DEBUG: Password received")
+    // Debugging: Confirm password received
 	// Define connection parameters
-	connParams := map[string]interface{}{
-		"host":     "localhost",
-		"port":     5432,
-		"database": "knowledge_base",
-		"user":     "gedgar",
-		"password": password,
-	}
+		// Database connection parameters
+		connParams := ConnectionParams{
+			Host:     "localhost",
+			Database: "knowledge_base",
+			User:     "gedgar",
+			Password: password,
+			Port:     5432,
+		}
+	
+		
 
 	// Initialize KnowledgeBaseManager
 	kbManager, err := NewKnowledgeBaseManager("knowledge_base", connParams)
 	if err != nil {
 		t.Fatalf("Error initializing KnowledgeBaseManager: %v", err)
 	}
-	defer kbManager.disconnect()
+	defer kbManager.Disconnect()
 
 	// Test adding knowledge bases
 	t.Run("AddKB", func(t *testing.T) {
