@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "math_utils",
+    "calculator",
+]
+
