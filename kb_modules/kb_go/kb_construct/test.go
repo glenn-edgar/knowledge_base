@@ -3,7 +3,7 @@
 package main
 
 import (
-    "flag"
+    //"flag"
     "fmt"
     "log"
     "os"
@@ -14,15 +14,16 @@ import (
 
 func main() {
     // Get password from user
-    fmt.Print("Enter PostgreSQL password: ")
-    var password string
-    fmt.Scanln(&password)
+    password := os.Getenv("POSTGRES_PASSWORD")
+	if password == "" {
+		log.Fatal("POSTGRES_PASSWORD is not set")
+	}
 
     // Database configuration
     dbHost := "localhost"
     dbPort := 5432
     dbName := "knowledge_base"
-    dbUser := os.Getenv("POSTGRES_USER")
+    dbUser := "gedgar"
     database := "knowledge_base"
 
     // Create ConstructDataTables instance
