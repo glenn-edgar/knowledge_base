@@ -1,4 +1,4 @@
-module github.com/glenn-edgar/gknowledge_base/kb_modules/kb_go/postgres/data_structures/data_structures_module
+module github.com/glenn-edgar/knowledge_base/kb_modules/kb_go/postgres/data_structures/data_structures_module
 
 go 1.24.4
 
