@@ -1,4 +1,4 @@
-module github.com/glenn-edgar/knowlege_base/kb_modules/kb_go/kb_construct/kb_construct_module
+module github.com/glenn-edgar/knowlege_base/kb_modules/kb_go/postgres/kb_construct/kb_construct_module
 
 go 1.24.4
 

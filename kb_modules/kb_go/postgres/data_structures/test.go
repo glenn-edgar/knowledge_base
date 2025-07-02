@@ -1,4 +1,14 @@
 // TestServerFunctions tests RPC server functionality
+
+package main
+
+import (
+	"fmt"
+	"log"
+	"github.com/google/uuid"
+	"github.com/knowledge_base/kb_modules/kb_go/postgres/data_structures/data_structures_module"
+)
+
 func (kds *KBDataStructures) TestServerFunctions(serverPath string) error {
 	fmt.Printf("rpc_server_path: %s\n", serverPath)
 	fmt.Println("initial state")

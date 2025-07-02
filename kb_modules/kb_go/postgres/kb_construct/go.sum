@@ -1,5 +1,5 @@
-github.com/glenn-edgar/knowlege_base/kb_modules/kb_go/kb_construct/kb_construct_module v0.0.0-20250701004730-dc8d74996a3f h1:S9HKQp9SthZLlJlYiyvfSElBrI1xqnXa8s7IEnn6Xa4=
-github.com/glenn-edgar/knowlege_base/kb_modules/kb_go/kb_construct/kb_construct_module v0.0.0-20250701004730-dc8d74996a3f/go.mod h1:yqNKZlvJb654PFIX87+lzVKKyA1//I+qopTyKOrG5CQ=
+github.com/glenn-edgar/knowlege_base/kb_modules/kb_go/kb_construct/kb_construct_module v0.0.0-20250701012232-edd7cd735d60 h1:VnlIrq10+x14HZ40TSvNizdu+2y5MGGmzg0WbJ/6ua4=
+github.com/glenn-edgar/knowlege_base/kb_modules/kb_go/kb_construct/kb_construct_module v0.0.0-20250701012232-edd7cd735d60/go.mod h1:yqNKZlvJb654PFIX87+lzVKKyA1//I+qopTyKOrG5CQ=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
