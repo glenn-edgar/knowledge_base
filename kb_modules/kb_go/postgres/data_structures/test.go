@@ -1,203 +1,268 @@
-// TestServerFunctions tests RPC server functionality
-
 package main
 
 import (
-	"fmt"
-	"log"
-	"github.com/google/uuid"
-	"github.com/glenn-edgar/knowledge_base/kb_modules/kb_go/postgres/data_structures/data_structures_module"
+    "fmt"
+    "log"
+    "time"
+
+    "github.com/google/uuid"
+    ds "github.com/glenn-edgar/knowledge_base/kb_modules/kb_go/postgres/data_structures/data_structures_module"
 )
 
-func (kds *KBDataStructures) TestServerFunctions(serverPath string) error {
-	fmt.Printf("rpc_server_path: %s\n", serverPath)
-	fmt.Println("initial state")
-
-	fmt.Println("clear server queue")
-	if err := kds.RPCServerClearServerQueue(serverPath); err != nil {
-		return err
-	}
-
-	jobs, err := kds.RPCServerListJobsJobTypes(serverPath, "new_job")
-	if err != nil {
-		return err
-	}
-	fmt.Printf("list_jobs_job_types: %v\n", jobs)
-
-	requestID1 := uuid.New().String()
-	err = kds.RPCServerPushRPCQueue(serverPath, requestID1, "rpc_action1", 
-		map[string]interface{}{"data1": "data1"}, "transaction_tag_1", 1, 
-		"rpc_client_queue", 5, 0.5)
-	if err != nil {
-		return err
-	}
-
-	requestID2 := uuid.New().String()
-	err = kds.RPCServerPushRPCQueue(serverPath, requestID2, "rpc_action2", 
-		map[string]interface{}{"data2": "data1"}, "transaction_tag_2", 2, 
-		"rpc_client_queue", 5, 0.5)
-	if err != nil {
-		return err
-	}
-
-	jobs, _ = kds.RPCServerListJobsJobTypes(serverPath, "new_job")
-	fmt.Printf("list_jobs_job_types: %v\n", jobs)
-
-	requestID3 := uuid.New().String()
-	err = kds.RPCServerPushRPCQueue(serverPath, requestID3, "rpc_action3", 
-		map[string]interface{}{"data3": "data1"}, "transaction_tag_3", 3, 
-		"rpc_client_queue", 5, 0.5)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("request_ids: %s, %s, %s\n", requestID1, requestID2, requestID3)
-
-	jobData1, err := kds.RPCServerPeakServerQueue(serverPath)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("job_data_1: %v\n", jobData1)
-
-	kds.RPCServerCountAllJobs(serverPath)
-	jobData2, _ := kds.RPCServerPeakServerQueue(serverPath)
-	fmt.Printf("job_data_2: %v\n", jobData2)
-
-	kds.RPCServerCountAllJobs(serverPath)
-	jobData3, _ := kds.RPCServerPeakServerQueue(serverPath)
-	fmt.Printf("job_data_3: %v\n", jobData3)
-
-	if id1, ok := jobData1["id"]; ok {
-		kds.RPCServerMarkJobCompletion(serverPath, id1)
-	}
-
-	if id2, ok := jobData2["id"]; ok {
-		kds.RPCServerMarkJobCompletion(serverPath, id2)
-	}
-
-	if id3, ok := jobData3["id"]; ok {
-		kds.RPCServerMarkJobCompletion(serverPath, id3)
-	}
-
-	return nil
-}
-
-// TestClientQueue tests RPC client functionality
-func (kds *KBDataStructures) TestClientQueue(clientPath string) error {
-	fmt.Println("=== Initial State ===")
-	
-	freeSlots, err := kds.RPCClientFindFreeSlots(clientPath)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Number of free slots: %d\n", freeSlots)
-
-	queuedSlots, err := kds.RPCClientFindQueuedSlots(clientPath)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Number of queued slots: %d\n", queuedSlots)
-
-	waitingJobs, err := kds.RPCClientListWaitingJobs(clientPath)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Waiting jobs: %v\n", waitingJobs)
-
-	err = kds.RPCClientClearReplyQueue(clientPath)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("\n=== Pushing First Set of Reply Data ===")
-	requestID1 := uuid.New()
-	err = kds.RPCClientPushAndClaimReplyData(clientPath, requestID1, "xxx", "Action1", "xxx", 
-		map[string]interface{}{"data1": "data1"})
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Pushed reply data with request ID: %s\n", requestID1.String())
-
-	requestID2 := uuid.New().String()
-	err = kds.RPCClientPushAndClaimReplyData(clientPath, requestID2, "xxx", "Action2", "yyy", 
-		map[string]interface{}{"data2": "data2"})
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Pushed reply data with request ID: %s\n", requestID2)
-
-	// Continue with the rest of the test logic...
-	fmt.Println("\n=== Peek and Release First Data ===")
-	peakData, err := kds.RPCClientPeakAndClaimReplyData(clientPath)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Peak data: %v\n", peakData)
-
-	return nil
-}
-
-// Example usage and main function
 func main() {
-	// This would typically get the password from secure input
-	password := "your_password"
+    var password string
+    fmt.Print("Enter PostgreSQL password: ")
+    fmt.Scanln(&password)
 
-	kbDataStructures, err := NewKBDataStructures(
-		"localhost",        // host
-		"5432",            // port
-		"knowledge_base",   // dbname
-		"gedgar",          // user
-		password,          // password
-		"knowledge_base",   // database
-	)
-	if err != nil {
-		log.Fatal("Failed to create KB_Data_Structures:", err)
-	}
-	defer kbDataStructures.Disconnect()
+    host := "localhost"
+    port := "5432"
+    dbname := "knowledge_base"
+    user := "gedgar"
+    database := "knowledge_base"
 
-	// Example status data test
-	fmt.Println("***************************  status data ***************************")
-	
-	nodeIDs, err := kbDataStructures.FindStatusNodeIDs(nil, nil, nil, nil)
-	if err != nil {
-		log.Printf("Error finding status node IDs: %v", err)
-	} else {
-		fmt.Printf("node_ids: %v\n", nodeIDs)
-		
-		pathValues, err := kbDataStructures.FindPathValues(nodeIDs)
-		if err != nil {
-			log.Printf("Error finding path values: %v", err)
-		} else {
-			fmt.Printf("path_values: %v\n", pathValues)
-		}
-	}
+    kds, err := ds.NewKBDataStructures(host, port, dbname, user, password, database)
+    if err != nil {
+        log.Fatalf("Failed to create KBDataStructures: %v", err)
+    }
+    defer func() {
+        if err := kds.Disconnect(); err != nil {
+            log.Printf("Error during disconnect: %v", err)
+        }
+    }()
 
-	// Example job queue test
-	fmt.Println("***************************  job queue data ***************************")
-	
-	jobIDs, err := kbDataStructures.FindJobIDs(nil, nil, nil, nil)
-	if err != nil {
-		log.Printf("Error finding job IDs: %v", err)
-	} else {
-		fmt.Printf("job_ids: %v\n", jobIDs)
-	}
+    // === Status Data Test ===
+    fmt.Println("=== Status Data Test ===")
+    statusNodes, err := kds.FindStatusNodeIDs(nil, nil, nil, nil)
+    if err != nil {
+        log.Fatalf("FindStatusNodeIDs error: %v", err)
+    }
+    fmt.Printf("All status node IDs: %v\n", statusNodes)
 
-	// Example link table test
-	fmt.Println("***************************  Link Tables ***************************")
-	
-	linkNames, err := kbDataStructures.LinkTableFindAllLinkNames()
-	if err != nil {
-		log.Printf("Error finding link names: %v", err)
-	} else {
-		fmt.Printf("find_all_link_names: %v\n", linkNames)
-	}
+    paths := kds.FindPathValues(statusNodes)
+    fmt.Printf("All status paths: %v\n", paths)
 
-	nodeNames, err := kbDataStructures.LinkTableFindAllNodeNames()
-	if err != nil {
-		log.Printf("Error finding node names: %v", err)
-	} else {
-		fmt.Printf("find_all_node_names: %v\n", nodeNames)
-	}
+    // Specific status node
+    kb1 := "kb1"
+    nodeName := "info2_status"
+    props := map[string]interface{}{"prop3": "val3"}
+    nodePath := "*.header1_link.header1_name.KB_STATUS_FIELD.info2_status"
+    specificNodes, err := kds.FindStatusNodeIDs(&kb1, &nodeName, props, &nodePath)
+    if err != nil {
+        log.Fatalf("Find specific status node error: %v", err)
+    }
+    if len(specificNodes) > 0 {
+        spec := specificNodes[0]
+        fmt.Printf("Specific status node: %v\n", spec)
 
-	fmt.Println("Knowledge Base Data Structures initialized successfully!")
+        specPath := kds.FindPathValues([]map[string]interface{}{spec})[0]
+        fmt.Printf("Path of specific node: %s\n", specPath)
+
+        desc := kds.FindDescription(spec)
+        fmt.Printf("Description: %v\n", desc)
+
+        data, _, err := kds.GetStatusData(specPath)
+        if err != nil {
+            log.Printf("GetStatusData error: %v", err)
+        }
+        fmt.Printf("Initial data: %v\n", data)
+
+        ok, _, err := kds.SetStatusData(specPath, map[string]interface{}{"prop1": "val1", "prop2": "val2"}, 3, time.Second)
+        if err != nil {
+            log.Printf("SetStatusData error: %v", err)
+        }
+        fmt.Printf("Data set successful: %t\n", ok)
+
+        updated, _, err := kds.GetStatusData(specPath)
+        if err != nil {
+            log.Printf("GetStatusData error: %v", err)
+        }
+        fmt.Printf("Data after set: %v\n", updated)
+    }
+
+    // === Job Queue Test ===
+    fmt.Println("=== Job Queue Test ===")
+    jobNodes, err := kds.FindJobIDs(nil, nil, nil, nil)
+    if err != nil {
+        log.Fatalf("FindJobIDs error: %v", err)
+    }
+    jobPaths := kds.FindPathValues(jobNodes)
+    if len(jobPaths) > 0 {
+        jp := jobPaths[0]
+        fmt.Printf("First job queue path: %s\n", jp)
+
+        // Clear and test
+        kds.ClearJobQueue(jp)
+        queued, err := kds.GetQueuedNumber(jp)
+        if err != nil {
+            log.Printf("GetQueuedNumber error: %v", err)
+        }
+        free, err := kds.GetFreeNumber(jp)
+        if err != nil {
+            log.Printf("GetFreeNumber error: %v", err)
+        }
+        fmt.Printf("Queued: %d, Free: %d\n", queued, free)
+
+        // Push a job
+        if _, err := kds.PushJobData(jp, map[string]interface{}{"prop1": "val1", "prop2": "val2"}, 3, time.Second); err != nil {
+            log.Printf("PushJobData error: %v", err)
+        }
+        queued, _ = kds.GetQueuedNumber(jp)
+        free, _ = kds.GetFreeNumber(jp)
+        fmt.Printf("After push -> Queued: %d, Free: %d\n", queued, free)
+
+        pending, _ := kds.ListPendingJobs(jp, nil, 0)
+        active, _ := kds.ListActiveJobs(jp, nil, 0)
+        fmt.Printf("Pending: %v, Active: %v\n", pending, active)
+
+        peakRec, _ := kds.PeakJobData(jp, 3, time.Second)
+        fmt.Printf("Peak job data: %v\n", peakRec)
+
+        id, _ := peakRec.ID, peakRec
+        if _, err := kds.MarkJobCompleted(id, 3, time.Second); err != nil {
+            log.Printf("MarkJobCompleted error: %v", err)
+        }
+    }
+
+     // === Stream Data Test ===
+	 fmt.Println("=== Stream Data Test ===")
+	 streamName := "info1_stream"
+	 streamNodes, err := kds.FindStreamIDs(&kb1, &streamName, nil, nil)
+	 if err != nil {
+		 log.Printf("FindStreamIDs error: %v", err)
+	 }
+	 streamKeys := kds.FindStreamTableKeys(streamNodes)
+	 fmt.Printf("stream_table_keys: %v\n", streamKeys)
+ 
+	 descs, err := kds.FindDescriptionPaths(streamKeys)
+	 if err != nil {
+		 log.Printf("FindDescriptionPaths error: %v", err)
+	 }
+	 fmt.Printf("descriptions: %v\n", descs)
+ 
+	 if len(streamKeys) > 0 {
+		 key := streamKeys[0]
+		 if err := kds.ClearStreamData(key, nil); err != nil {
+			 log.Printf("ClearStreamData error: %v", err)
+		 }
+		 if _, err := kds.PushStreamData(key, map[string]interface{}{"prop1": "val1", "prop2": "val2"}, 3, time.Second); err != nil {
+			 log.Printf("PushStreamData error: %v", err)
+		 }
+		 recs, err := kds.ListStreamData(key, nil, 0, nil, nil, "ASC")
+		 if err != nil {
+			 log.Printf("ListStreamData error: %v", err)
+		 }
+		 fmt.Printf("list_stream_data: %v\n", recs)
+ 
+		 pastTimestamp := time.Now().Add(-15 * time.Minute)
+		 beforeTimestamp := time.Now()
+		 fmt.Printf("past_timestamp: %v\n", pastTimestamp)
+		 fmt.Println("past data")
+		 recsPast, err := kds.ListStreamData(key, nil, 0, &pastTimestamp, &beforeTimestamp, "ASC")
+		 if err != nil {
+			 log.Printf("ListStreamData (past) error: %v", err)
+		 }
+		 fmt.Printf("list_stream_data: %v\n", recsPast)
+	 }
+
+    // === RPC Tests ===
+    fmt.Println("=== RPC Client/Server Tests ===")
+    // Client
+    clientNodes, err := kds.FindRPCClientIDs(nil, nil, nil, nil)
+    if err == nil && len(clientNodes) > 0 {
+        clientKeys := kds.FindRPCClientKeys(clientNodes)
+        testClientQueue(kds, clientKeys[0])
+    }
+
+    // Server
+    serverNodes, err := kds.FindRPCServerIDs(nil, nil, nil, nil)
+    if err == nil && len(serverNodes) > 0 {
+        serverKeys := kds.FindRPCServerTableKeys(serverNodes)
+        testServerFunctions(kds, serverKeys[0])
+    }
+
+    // === Link Table Tests ===
+    fmt.Println("=== Link Table Tests ===")
+    linkNames, err := kds.LinkTableFindAllLinkNames()
+    if err == nil && len(linkNames) > 0 {
+        recs, _ := kds.LinkTableFindRecordsByLinkName(linkNames[0], nil)
+        fmt.Printf("Records by link name: %v\n", recs)
+    }
+    mountNames, err := kds.LinkMountTableFindAllMountPaths()
+    if err == nil && len(mountNames) > 0 {
+        recs, _ := kds.LinkMountTableFindRecordsByMountPath(mountNames[0], nil)
+        fmt.Printf("Records by mount path: %v\n", recs)
+    }
+}
+
+func testServerFunctions(kds *ds.KBDataStructures, serverPath string) {
+    fmt.Println("--- testServerFunctions for", serverPath)
+    // Clear server queue
+    if _, err := kds.RPCServerClearServerQueue(serverPath, 3, time.Second); err != nil {
+        log.Println("RPCServerClearServerQueue error:", err)
+    }
+    jobs, err := kds.RPCServerListJobsJobTypes(serverPath, "new_job")
+    if err != nil {
+        log.Println("RPCServerListJobsJobTypes error:", err)
+    } else {
+        fmt.Println("Jobs of type 'new_job':", jobs)
+    }
+
+    clientQueue := "rpc_client_queue"
+    // Push three RPC requests
+    for i := 1; i <= 3; i++ {
+        reqID := uuid.New().String()
+        action := fmt.Sprintf("rpc_action%d", i)
+        payload := map[string]interface{}{fmt.Sprintf("data%d", i): fmt.Sprintf("data%d", i)}
+        _, err := kds.RPCServerPushRPCQueue(serverPath, reqID, action, payload, fmt.Sprintf("transaction_tag_%d", i), i, &clientQueue, 5, 500*time.Millisecond)
+        if err != nil {
+            log.Println("RPCServerPushRPCQueue error:", err)
+        }
+    }
+    // Peek and complete jobs
+    for i := 0; i < 3; i++ {
+        rec, err := kds.RPCServerPeakServerQueue(serverPath, 5, 500*time.Millisecond)
+        if err != nil {
+            log.Println("RPCServerPeakServerQueue error:", err)
+            break
+        }
+        id := int(rec["id"].(int64))
+        fmt.Println("Peaked job:", rec)
+        if _, err := kds.RPCServerMarkJobCompletion(serverPath, id, 5, time.Second); err != nil {
+            log.Println("RPCServerMarkJobCompletion error:", err)
+        }
+        count, _ := kds.RPCServerCountAllJobs(serverPath)
+        fmt.Println("Remaining jobs count:", count)
+    }
+}
+
+func testClientQueue(kds *ds.KBDataStructures, clientPath string) {
+    fmt.Println("--- testClientQueue for", clientPath)
+    free, _ := kds.RPCClientFindFreeSlots(clientPath)
+    queued, _ := kds.RPCClientFindQueuedSlots(clientPath)
+    fmt.Printf("Free slots: %d, Queued slots: %d\n", free, queued)
+
+    // Clear reply queue
+    if _, err := kds.RPCClientClearReplyQueue(clientPath, 3, time.Second); err != nil {
+        log.Println("RPCClientClearReplyQueue error:", err)
+    }
+
+    //clientQueue := "rpc_client_queue"
+    // Push and claim two replies
+    for i := 1; i <= 2; i++ {
+        reqID := uuid.New().String()
+         err := kds.RPCClientPushAndClaimReplyData(clientPath, reqID, "xxx", fmt.Sprintf("Action%d", i), "yyy", map[string]interface{}{fmt.Sprintf("data%d", i): fmt.Sprintf("data%d", i)}, 5, time.Second)
+        if err != nil {
+            log.Println("RPCClientPushAndClaimReplyData error:", err)
+        }
+    }
+
+    // Peek and release
+    for i := 0; i < 2; i++ {
+        rec, err := kds.RPCClientPeakAndClaimReplyData(clientPath, 5, time.Second)
+        if err != nil {
+            log.Println("RPCClientPeakAndClaimReplyData error:", err)
+            break
+        }
+        fmt.Println("Peeked reply data:", rec)
+    }
 }

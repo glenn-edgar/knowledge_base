@@ -450,25 +450,46 @@ if __name__ == "__main__":
     """
     Stream tables
     """
-    print("***************************  stream data ***************************")
-    
-    node_ids = kb_data_structures.find_stream_ids(kb="kb1", node_name="info1_stream", properties=None, node_path=None)
-   
-    stream_table_keys = kb_data_structures.find_stream_table_keys(node_ids)
-    print("stream_table_keys", stream_table_keys)
-    
-    descriptions = kb_data_structures.find_description_paths(stream_table_keys)
-    print("descriptions", descriptions)
-    
-    kb_data_structures.clear_stream_data(stream_table_keys[0])
-    kb_data_structures.push_stream_data(stream_table_keys[0], {"prop1": "val1", "prop2": "val2"})
-    print("list_stream_data", kb_data_structures.list_stream_data(stream_table_keys[0]))
-    
-    past_timestamp = datetime.now(timezone.utc) - timedelta(minutes=15)
-    before_timestamp = datetime.now(timezone.utc)
-    print("past_timestamp", past_timestamp)
-    print("past data")
-    print("list_stream_data", kb_data_structures.list_stream_data(stream_table_keys[0], recorded_after=past_timestamp, recorded_before=before_timestamp))
+     // === Stream Data Test ===
+    fmt.Println("=== Stream Data Test ===")
+    streamName := "info1_stream"
+    streamNodes, err := kds.FindStreamIDs(&kb1, &streamName, nil, nil)
+    if err != nil {
+        log.Printf("FindStreamIDs error: %v", err)
+    }
+    streamKeys := kds.FindStreamTableKeys(streamNodes)
+    fmt.Printf("stream_table_keys: %v\n", streamKeys)
+
+    descs, err := kds.FindDescriptionPaths(streamKeys)
+    if err != nil {
+        log.Printf("FindDescriptionPaths error: %v", err)
+    }
+    fmt.Printf("descriptions: %v\n", descs)
+
+    if len(streamKeys) > 0 {
+        key := streamKeys[0]
+        if err := kds.ClearStreamData(key, nil); err != nil {
+            log.Printf("ClearStreamData error: %v", err)
+        }
+        if _, err := kds.PushStreamData(key, map[string]interface{}{"prop1": "val1", "prop2": "val2"}, 3, time.Second); err != nil {
+            log.Printf("PushStreamData error: %v", err)
+        }
+        recs, err := kds.ListStreamData(key, nil, 0, nil, nil, "asc")
+        if err != nil {
+            log.Printf("ListStreamData error: %v", err)
+        }
+        fmt.Printf("list_stream_data: %v\n", recs)
+
+        pastTimestamp := time.Now().Add(-15 * time.Minute)
+        beforeTimestamp := time.Now()
+        fmt.Printf("past_timestamp: %v\n", pastTimestamp)
+        fmt.Println("past data")
+        recsPast, err := kds.ListStreamData(key, nil, 0, &pastTimestamp, &beforeTimestamp, "asc")
+        if err != nil {
+            log.Printf("ListStreamData (past) error: %v", err)
+        }
+        fmt.Printf("list_stream_data: %v\n", recsPast)
+    }
     
     """
     RPC Functions
