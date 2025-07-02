@@ -324,29 +324,52 @@ func (kb *KBSearch) GetResults() []map[string]interface{} {
 	return kb.Results
 }
 
-// FindDescription extracts description from properties field of query results
-func (kb *KBSearch) FindDescription(keyData interface{}) []map[string]string {
-	var dataSlice []map[string]interface{}
 
-	switch v := keyData.(type) {
-	case map[string]interface{}:
-		dataSlice = []map[string]interface{}{v}
-	case []map[string]interface{}:
-		dataSlice = v
-	default:
-		return []map[string]string{}
+
+
+// FindDescription extracts description from properties field of a single query result
+func (kb *KBSearch) FindDescription(row map[string]interface{}) map[string]string {
+	description := ""
+	path := ""
+
+	// Extract path
+	if p, ok := row["path"].(string); ok {
+		path = p
 	}
 
+	// Extract description from properties
+	if props, ok := row["properties"]; ok {
+		// Handle properties as JSON
+		var propsMap map[string]interface{}
+		switch p := props.(type) {
+		case string:
+			json.Unmarshal([]byte(p), &propsMap)
+		case map[string]interface{}:
+			propsMap = p
+		}
+
+		if desc, ok := propsMap["description"].(string); ok {
+			description = desc
+		}
+	}
+
+	return map[string]string{path: description}
+}
+
+// FindDescriptions extracts descriptions from properties field of multiple query results
+func (kb *KBSearch) FindDescriptions(dataSlice []map[string]interface{}) []map[string]string {
 	returnValues := []map[string]string{}
 
 	for _, row := range dataSlice {
 		description := ""
 		path := ""
 
+		// Extract path
 		if p, ok := row["path"].(string); ok {
 			path = p
 		}
 
+		// Extract description from properties
 		if props, ok := row["properties"]; ok {
 			// Handle properties as JSON
 			var propsMap map[string]interface{}
@@ -368,30 +391,53 @@ func (kb *KBSearch) FindDescription(keyData interface{}) []map[string]string {
 	return returnValues
 }
 
-// FindDescriptionPaths finds data for specified paths in the knowledge base
-func (kb *KBSearch) FindDescriptionPaths(pathArray interface{}) (map[string]interface{}, error) {
-	var paths []string
-
-	// Normalize input to slice
-	switch v := pathArray.(type) {
-	case string:
-		paths = []string{v}
-	case []string:
-		paths = v
-	default:
-		return map[string]interface{}{}, fmt.Errorf("pathArray must be string or []string")
-	}
-
-	if len(paths) == 0 {
+// FindDescriptionPath finds data for a single specified path in the knowledge base
+func (kb *KBSearch) FindDescriptionPath(path string) (map[string]interface{}, error) {
+	if path == "" {
 		return map[string]interface{}{}, nil
 	}
 
 	returnValues := make(map[string]interface{})
 
+	query := fmt.Sprintf("SELECT path, data FROM %s WHERE path = $1", kb.BaseTable)
+	rows, err := kb.conn.Query(query, path)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving data for path: %v", err)
+	}
+	defer rows.Close()
+
+	found := false
+	for rows.Next() {
+		var dbPath string
+		var data interface{}
+		if err := rows.Scan(&dbPath, &data); err != nil {
+			return nil, err
+		}
+		returnValues[dbPath] = data
+		found = true
+	}
+
+	// Add nil for path not found
+	if !found {
+		returnValues[path] = nil
+	}
+
+	return returnValues, nil
+}
+
+// FindDescriptionPaths finds data for multiple specified paths in the knowledge base
+func (kb *KBSearch) FindDescriptionPaths(paths []string) ([]map[string]interface{}, error) {
+	if len(paths) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+
+	returnValues := []map[string]interface{}{}
+
 	var rows *sql.Rows
 	var err error
 
 	if len(paths) == 1 {
+		// Single path optimization
 		query := fmt.Sprintf("SELECT path, data FROM %s WHERE path = $1", kb.BaseTable)
 		rows, err = kb.conn.Query(query, paths[0])
 	} else {
@@ -421,14 +467,14 @@ func (kb *KBSearch) FindDescriptionPaths(pathArray interface{}) (map[string]inte
 		if err := rows.Scan(&path, &data); err != nil {
 			return nil, err
 		}
-		returnValues[path] = data
+		returnValues = append(returnValues, map[string]interface{}{path: data})
 		foundPaths[path] = true
 	}
 
 	// Add nil for paths not found
 	for _, path := range paths {
 		if !foundPaths[path] {
-			returnValues[path] = nil
+			returnValues = append(returnValues, map[string]interface{}{path: nil})
 		}
 	}
 
