@@ -9,7 +9,7 @@ import (
     "os"
 
     //_ "github.com/lib/pq"
-    kb "github.com/glenn-edgar/knowlege_base/kb_modules/kb_go/postgres/kb_construct/kb_construct_module"
+    kb "github.com/glenn-edgar/knowledge_base/kb_modules/kb_go/postgres/kb_construct/kb_construct_module"
 )
 
 func main() {
