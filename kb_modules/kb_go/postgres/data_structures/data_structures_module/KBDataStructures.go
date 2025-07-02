@@ -4,7 +4,7 @@ import (
 	//database/sql"
 	"fmt"
 	//"log"
-	//"time"
+	"time"
 
 	//"github.com/google/uuid"
 	_ "github.com/lib/pq" // PostgreSQL driver
@@ -51,7 +51,7 @@ func NewKBDataStructures(host, port, dbname, user, password, database string) (*
 		linkMountTable: linkMountTable,
 	}, nil
 }
-/*
+
 // Query Support Methods (delegated to querySupport)
 func (kds *KBDataStructures) ClearFilters() {
 	kds.querySupport.ClearFilters()
@@ -180,6 +180,9 @@ func (kds *KBDataStructures) ListActiveJobs(jobPath string, limit *int, offset i
 func (kds *KBDataStructures) ClearJobQueue(jobPath string) (*ClearQueueResult, error) {
 	return kds.jobQueue.ClearJobQueue(jobPath)
 }
+
+
+
 func (kds *KBDataStructures) FindStreamIDs(kb *string, nodeName *string, properties map[string]interface{}, nodePath *string) ([]map[string]interface{}, error) {
 	return kds.stream.FindStreamIDs(kb, nodeName, properties, nodePath)
 }
@@ -202,37 +205,37 @@ func (kds *KBDataStructures) ListStreamData(path string, limit *int, offset int,
 	return kds.stream.ListStreamData(path, limit, offset, recordedAfter, recordedBefore, order)
 }
 
-func (kds *KBDataStructures) ClearStreamData(streamKey string) error {
-	return kds.stream.ClearStreamData(streamKey)
+func (kds *KBDataStructures) ClearStreamData(path string, olderThan *time.Time) *ClearResult{
+	return kds.stream.ClearStreamData(path, olderThan)
 }
 
-func (kds *KBDataStructures) GetStreamDataCount(streamKey string) (int, error) {
-	return kds.stream.GetStreamDataCount(streamKey)
+func (kds *KBDataStructures) GetStreamDataCount(path string, includeInvalid bool) (int, error) {
+	return kds.stream.GetStreamDataCount(path, includeInvalid)
 }
 
-func (kds *KBDataStructures) GetStreamDataRange(streamKey string, start, end int) ([]map[string]interface{}, error) {
-	return kds.stream.GetStreamDataRange(streamKey, start, end)
+func (kds *KBDataStructures) GetStreamDataRange(path string, startTime, endTime time.Time) ([]StreamRecord, error) {
+	return kds.stream.GetStreamDataRange(path, startTime, endTime)
 }
 
-func (kds *KBDataStructures) GetStreamStatistics(streamKey string) (map[string]interface{}, error) {
-	return kds.stream.GetStreamStatistics(streamKey)
+func (kds *KBDataStructures) GetStreamStatistics(path string, includeInvalid bool) (*StreamStatistics, error){
+	return kds.stream.GetStreamStatistics(path, includeInvalid)
 }
 
-func (kds *KBDataStructures) GetStreamDataByID(streamKey string, id int) (map[string]interface{}, error) {
-	return kds.stream.GetStreamDataByID(streamKey, id)
+func (kds *KBDataStructures) GetStreamDataByID(recordID int) (*StreamRecord, error) {
+	return kds.stream.GetStreamDataByID(recordID)
 }
 
 // RPC Client Methods (delegated to rpcClient)
-func (kds *KBDataStructures) RPCClientFindRPCClientID(nodeName *string, properties map[string]interface{}, nodePath *string) ([]string, error) {
-	return kds.rpcClient.FindRPCClientID(nodeName, properties, nodePath)
+func (kds *KBDataStructures) FindRPCClientID(kb *string, nodeName *string, properties map[string]interface{}, nodePath *string) (map[string]interface{}, error) {
+	return kds.rpcClient.FindRPCClientID(kb, nodeName, properties, nodePath)
 }
 
-func (kds *KBDataStructures) RPCClientFindRPCClientIDs(nodeName *string, properties map[string]interface{}, nodePath *string) ([]string, error) {
-	return kds.rpcClient.FindRPCClientIDs(nodeName, properties, nodePath)
+func (kds *KBDataStructures) FindRPCClientIDs(kb *string, nodeName *string, properties map[string]interface{}, nodePath *string) ([]map[string]interface{}, error) {
+	return kds.rpcClient.FindRPCClientIDs(kb, nodeName, properties, nodePath)
 }
 
-func (kds *KBDataStructures) RPCClientFindRPCClientKeys(nodeIDs []string) ([]string, error) {
-	return kds.rpcClient.FindRPCClientKeys(nodeIDs)
+func (kds *KBDataStructures) FindRPCClientKeys(keyData []map[string]interface{}) []string {
+	return kds.rpcClient.FindRPCClientKeys(keyData)
 }
 
 func (kds *KBDataStructures) RPCClientFindFreeSlots(clientPath string) (int, error) {
@@ -243,49 +246,50 @@ func (kds *KBDataStructures) RPCClientFindQueuedSlots(clientPath string) (int, e
 	return kds.rpcClient.FindQueuedSlots(clientPath)
 }
 
-func (kds *KBDataStructures) RPCClientPeakAndClaimReplyData(clientPath string) (map[string]interface{}, error) {
-	return kds.rpcClient.PeakAndClaimReplyData(clientPath)
+func (kds *KBDataStructures) RPCClientPeakAndClaimReplyData(clientPath string, maxRetries int, retryDelay time.Duration) (*ReplyData, error) {
+	return kds.rpcClient.PeakAndClaimReplyData(clientPath, maxRetries, retryDelay)
 }
 
-func (kds *KBDataStructures) RPCClientClearReplyQueue(clientPath string) error {
-	return kds.rpcClient.ClearReplyQueue(clientPath)
+func (kds *KBDataStructures) RPCClientClearReplyQueue(clientPath string, maxRetries int, retryDelay time.Duration) (int, error) {
+	return kds.rpcClient.ClearReplyQueue(clientPath, maxRetries, retryDelay)
 }
 
-func (kds *KBDataStructures) RPCClientPushAndClaimReplyData(clientPath string, requestID interface{}, serverPath, action, transactionTag string, replyPayload map[string]interface{}) error {
-	return kds.rpcClient.PushAndClaimReplyData(clientPath, requestID, serverPath, action, transactionTag, replyPayload)
+func (kds *KBDataStructures) RPCClientPushAndClaimReplyData(clientPath string, requestUUID, serverPath, rpcAction, 
+	transactionTag string, replyData map[string]interface{}, maxRetries int, retryDelay time.Duration) error {
+	return kds.rpcClient.PushAndClaimReplyData(clientPath, requestUUID, serverPath, rpcAction, transactionTag, replyData, maxRetries, retryDelay)
 }
 
-func (kds *KBDataStructures) RPCClientListWaitingJobs(clientPath string) ([]map[string]interface{}, error) {
+func (kds *KBDataStructures) RPCClientListWaitingJobs(clientPath *string) ([]ReplyData, error) {
 	return kds.rpcClient.ListWaitingJobs(clientPath)
 }
 
 // RPC Server Methods (delegated to rpcServer)
-func (kds *KBDataStructures) RPCServerIDFind(nodeName *string, properties map[string]interface{}, nodePath *string) ([]string, error) {
-	return kds.rpcServer.FindRPCServerID(nodeName, properties, nodePath)
+func (kds *KBDataStructures) FindRPCServerID(kb *string, nodeName *string, properties map[string]interface{}, nodePath *string) (map[string]interface{}, error) {
+	return kds.rpcServer.FindRPCServerID(kb, nodeName, properties, nodePath)
 }
 
-func (kds *KBDataStructures) RPCServerIDsFind(nodeName *string, properties map[string]interface{}, nodePath *string) ([]string, error) {
-	return kds.rpcServer.FindRPCServerIDs(nodeName, properties, nodePath)
+func (kds *KBDataStructures) FindRPCServerIDs(kb *string, nodeName *string, properties map[string]interface{}, nodePath *string) ([]map[string]interface{}, error) {
+	return kds.rpcServer.FindRPCServerIDs(kb, nodeName, properties, nodePath)
 }
 
-func (kds *KBDataStructures) RPCServerTableKeysFind(nodeIDs []string) ([]string, error) {
-	return kds.rpcServer.FindRPCServerTableKeys(nodeIDs)
+func (kds *KBDataStructures) FindRPCServerTableKeys(keyData []map[string]interface{}) []string{
+	return kds.rpcServer.FindRPCServerTableKeys(keyData)
 }
 
 func (kds *KBDataStructures) RPCServerListJobsJobTypes(serverPath, jobType string) ([]map[string]interface{}, error) {
 	return kds.rpcServer.ListJobsJobTypes(serverPath, jobType)
 }
 
-func (kds *KBDataStructures) RPCServerCountAllJobs(serverPath string) (int, error) {
-	return kds.rpcServer.CountAllJobs(serverPath)
+func (kds *KBDataStructures) RPCServerCountAllJobs(serverPath string) (*JobCounts, error) {
+	return kds.rpcServer.CountAllJobs( serverPath)
 }
 
-func (kds *KBDataStructures) RPCServerCountEmptyJobs(serverPath string) (int, error) {
-	return kds.rpcServer.CountEmptyJobs(serverPath)
+func (kds *KBDataStructures) RPCServerCountEmptyJobs(serverPath string) (int, error){
+	return kds.rpcServer.CountEmptyJobs( serverPath)
 }
 
 func (kds *KBDataStructures) RPCServerCountNewJobs(serverPath string) (int, error) {
-	return kds.rpcServer.CountNewJobs(serverPath)
+	return kds.rpcServer.CountNewJobs( serverPath)
 }
 
 func (kds *KBDataStructures) RPCServerCountProcessingJobs(serverPath string) (int, error) {
@@ -296,20 +300,21 @@ func (kds *KBDataStructures) RPCServerCountJobsJobTypes(serverPath, jobType stri
 	return kds.rpcServer.CountJobsJobTypes(serverPath, jobType)
 }
 
-func (kds *KBDataStructures) RPCServerPushRPCQueue(serverPath, requestID, rpcAction string, requestPayload map[string]interface{}, transactionTag string, priority int, rpcClientQueue string, maxRetries int, waitTime float64) error {
+func (kds *KBDataStructures) RPCServerPushRPCQueue(serverPath, requestID, rpcAction string, requestPayload map[string]interface{},
+	transactionTag string, priority int, rpcClientQueue *string, maxRetries int, waitTime time.Duration) (map[string]interface{}, error) {
 	return kds.rpcServer.PushRPCQueue(serverPath, requestID, rpcAction, requestPayload, transactionTag, priority, rpcClientQueue, maxRetries, waitTime)
 }
 
-func (kds *KBDataStructures) RPCServerPeakServerQueue(serverPath string) (map[string]interface{}, error) {
-	return kds.rpcServer.PeakServerQueue(serverPath)
+func (kds *KBDataStructures) RPCServerPeakServerQueue(serverPath string, retries int, waitTime time.Duration) (map[string]interface{}, error) {
+	return kds.rpcServer.PeakServerQueue(serverPath,retries, waitTime)
 }
 
-func (kds *KBDataStructures) RPCServerMarkJobCompletion(serverPath string, jobID interface{}) error {
-	return kds.rpcServer.MarkJobCompletion(serverPath, jobID)
+func (kds *KBDataStructures) RPCServerMarkJobCompletion(serverPath string, id int, maxRetries int, retryDelay time.Duration) (bool, error){
+	return kds.rpcServer.MarkJobCompletion(serverPath, id, maxRetries, retryDelay)
 }
 
-func (kds *KBDataStructures) RPCServerClearServerQueue(serverPath string) error {
-	return kds.rpcServer.ClearServerQueue(serverPath)
+func (kds *KBDataStructures) RPCServerClearServerQueue(serverPath string, maxRetries int, retryDelay time.Duration) (int, error) {
+	return kds.rpcServer.ClearServerQueue(serverPath, maxRetries, retryDelay)
 }
 
 // Link Table Methods (delegated to linkTable)
@@ -350,4 +355,4 @@ func (kds *KBDataStructures) LinkMountTableFindAllMountPaths() ([]string, error)
 func (kds *KBDataStructures) Disconnect() error {
 	return kds.querySupport.Disconnect()
 }
-	*/
+	

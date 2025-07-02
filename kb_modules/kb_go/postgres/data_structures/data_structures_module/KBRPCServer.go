@@ -28,7 +28,7 @@ type KBRPCServer struct {
 	conn      *sql.DB
 	BaseTable string
 }
-/*
+
 // RPCRecord represents a single RPC record
 type RPCRecord struct {
 	ID                  int                    `json:"id"`
@@ -44,7 +44,7 @@ type RPCRecord struct {
 	ProcessingTimestamp *time.Time             `json:"processing_timestamp"`
 	CompletedTimestamp  *time.Time             `json:"completed_timestamp"`
 }
-*/
+
 // JobCounts represents counts of different job states
 type JobCounts struct {
 	EmptyJobs      int `json:"empty_jobs"`
