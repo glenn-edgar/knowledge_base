@@ -13,7 +13,7 @@ type SearchMemDB struct {
 	kbs             map[string][]string  // Knowledge bases mapping
 	labels          map[string][]string  // Labels mapping
 	names           map[string][]string  // Names mapping
-	decodedKeys     map[string][]string  // Decoded path keys
+	DecodedKeys     map[string][]string  // Decoded path keys
 	FilterResults   map[string]*TreeNode // Current filter results
 }
 
@@ -24,7 +24,7 @@ func NewSearchMemDB(host string, port int, dbname, user, password, tableName str
 		kbs:              make(map[string][]string),
 		labels:           make(map[string][]string),
 		names:            make(map[string][]string),
-		decodedKeys:      make(map[string][]string),
+		DecodedKeys:      make(map[string][]string),
 		FilterResults:    make(map[string]*TreeNode),
 	}
 
@@ -48,20 +48,20 @@ func (smdb *SearchMemDB) generateDecodedKeys(data map[string]*TreeNode) map[stri
 	smdb.kbs = make(map[string][]string)
 	smdb.labels = make(map[string][]string)
 	smdb.names = make(map[string][]string)
-	smdb.decodedKeys = make(map[string][]string)
+	smdb.DecodedKeys = make(map[string][]string)
 
 	for key := range data {
 		// Split the key into components
-		smdb.decodedKeys[key] = strings.Split(key, ".")
+		smdb.DecodedKeys[key] = strings.Split(key, ".")
 		
-		if len(smdb.decodedKeys[key]) < 3 {
+		if len(smdb.DecodedKeys[key]) < 3 {
 			// Skip keys that don't have at least kb.label.name structure
 			continue
 		}
 
-		kb := smdb.decodedKeys[key][0]
-		label := smdb.decodedKeys[key][len(smdb.decodedKeys[key])-2]
-		name := smdb.decodedKeys[key][len(smdb.decodedKeys[key])-1]
+		kb := smdb.DecodedKeys[key][0]
+		label := smdb.DecodedKeys[key][len(smdb.DecodedKeys[key])-2]
+		name := smdb.DecodedKeys[key][len(smdb.DecodedKeys[key])-1]
 
 		// Add to knowledge bases map
 		if _, exists := smdb.kbs[kb]; !exists {
@@ -82,7 +82,7 @@ func (smdb *SearchMemDB) generateDecodedKeys(data map[string]*TreeNode) map[stri
 		smdb.names[name] = append(smdb.names[name], key)
 	}
 
-	return smdb.decodedKeys
+	return smdb.DecodedKeys
 }
 
 // ClearFilters clears all filters and resets the query state
@@ -285,6 +285,6 @@ func (smdb *SearchMemDB) GetNames() map[string][]string {
 
 // GetDecodedKeys returns all decoded keys
 func (smdb *SearchMemDB) GetDecodedKeys() map[string][]string {
-	return smdb.decodedKeys
+	return smdb.DecodedKeys
 }
 
