@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	//"strings"
 	km "github.com/glenn-edgar/knowledge_base/kb_modules/kb_go/kb_memory/kb_memory_module"
+	_ "github.com/lib/pq" // Import the PostgreSQL driver
 )
 
 
@@ -17,7 +19,7 @@ func ExampleSearchMemDBUsage() {
 	dbPort := 5432
 	dbName := "knowledge_base"
 	dbUser := "gedgar"
-	dbPassword := "password" // In real usage, get this securely
+	dbPassword := os.Getenv("POSTGRES_PASSWORD") // In real usage, get this securely
 	tableName := "composite_memory_kb"
 
 	kb, err := km.NewSearchMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, tableName)
@@ -116,7 +118,7 @@ func ExampleConstructMemDBUsage() {
 	dbPort := 5432
 	dbName := "knowledge_base"
 	dbUser := "gedgar"
-	dbPassword := "password" // In real usage, get this securely
+	dbPassword := os.Getenv("POSTGRES_PASSWORD") // In real usage, get this securely
 	dbTable := "knowledge_base"
 
 	kb := km.NewConstructMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, dbTable)
@@ -249,7 +251,7 @@ func ExampleConstructMemDBUsage() {
 // Example usage function
 func ExampleUsage() {
 	// Initialize the enhanced tree storage system
-	tree := km.NewBasicConstructDB("localhost", 5432, "knowledge_base", "gedgar", "password", "knowledge_base")
+	tree := km.NewBasicConstructDB("localhost", 5432, "knowledge_base", "gedgar", os.Getenv("POSTGRES_PASSWORD"), "knowledge_base")
 
 	fmt.Println("=== Full ltree-Compatible Tree Storage System ===")
 
