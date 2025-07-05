@@ -26,7 +26,7 @@ func ExampleSearchMemDBUsage() {
 		return
 	}
 
-	fmt.Printf("Decoded keys: %v\n", getMapKeys(kb.DecodedKeys))
+	fmt.Printf("Decoded keys: %v\n", getStringMapKeys(kb.DecodedKeys))
 	
 	// Test various search operations
 	fmt.Println("----------------------------------")
@@ -89,7 +89,7 @@ func ExampleSearchMemDBUsage() {
 }
 
 // Helper function to extract keys from a map
-func getMapKeys(m map[string]*kb.TreeNode) []string {
+func getMapKeys(m map[string]*km.TreeNode) []string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)

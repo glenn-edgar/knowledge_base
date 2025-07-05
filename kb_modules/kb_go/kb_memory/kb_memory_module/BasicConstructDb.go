@@ -34,7 +34,7 @@ type BasicConstructDB struct {
 	dbname           string
 	user             string
 	password         string
-	tableName        string
+	TableName        string
 	connectionParams map[string]interface{}
 }
 
@@ -62,7 +62,7 @@ type SyncStats struct {
 }
 
 // NewBasicConstructDB creates a new BasicConstructDB instance
-func NewBasicConstructDB(host string, port int, dbname, user, password, tableName string) *BasicConstructDB {
+func NewBasicConstructDB(host string, port int, dbname, user, password, TableName string) *BasicConstructDB {
 	return &BasicConstructDB{
 		data:      make(map[string]*TreeNode),
 		kbDict:    make(map[string]map[string]interface{}),
@@ -71,7 +71,7 @@ func NewBasicConstructDB(host string, port int, dbname, user, password, tableNam
 		dbname:    dbname,
 		user:      user,
 		password:  password,
-		tableName: tableName,
+		TableName: TableName,
 		connectionParams: map[string]interface{}{
 			"host":     host,
 			"port":     port,
@@ -835,7 +835,7 @@ func (db *BasicConstructDB) SyncWithPostgres(direction string) SyncStats {
 	stats := SyncStats{}
 
 	if direction == "import" || direction == "both" {
-		imported, err := db.ImportFromPostgres(db.tableName, "path", "data", "created_at", "updated_at")
+		imported, err := db.ImportFromPostgres(db.TableName, "path", "data", "created_at", "updated_at")
 		if err != nil {
 			log.Printf("Import failed: %v", err)
 		} else {
@@ -844,7 +844,7 @@ func (db *BasicConstructDB) SyncWithPostgres(direction string) SyncStats {
 	}
 
 	if direction == "export" || direction == "both" {
-		exported, err := db.ExportToPostgres(db.tableName, true, false)
+		exported, err := db.ExportToPostgres(db.TableName, true, false)
 		if err != nil {
 			log.Printf("Export failed: %v", err)
 		} else {
