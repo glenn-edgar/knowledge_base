@@ -378,7 +378,7 @@ func ExampleUsage() {
 	fmt.Println("\n6. PostgreSQL Integration Example:")
 
 	// Export to PostgreSQL
-	exported, err := tree.ExportToPostgres(tree.tableName, true, false)
+	exported, err := tree.ExportToPostgres(tree.TableName, true, false)
 	if err != nil {
 		fmt.Printf("Export error: %v\n", err)
 	} else {
@@ -386,7 +386,7 @@ func ExampleUsage() {
 	}
 
 	// Import from PostgreSQL
-	imported, err := tree.ImportFromPostgres(tree.tableName, "path", "data", "created_at", "updated_at")
+	imported, err := tree.ImportFromPostgres(tree.TableName, "path", "data", "created_at", "updated_at")
 	if err != nil {
 		fmt.Printf("Import error: %v\n", err)
 	} else {
