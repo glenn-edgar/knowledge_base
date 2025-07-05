@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
-	"strings"
-	"github.com/glenn-edgar/knowledge_base/kb_modules/kb_go/kb_memory/kb_memory_module"
+	//"strings"
+	kb "github.com/glenn-edgar/knowledge_base/kb_modules/kb_go/kb_memory/kb_memory_module"
 )
 
 
@@ -20,7 +20,7 @@ func ExampleSearchMemDBUsage() {
 	dbPassword := "password" // In real usage, get this securely
 	tableName := "composite_memory_kb"
 
-	kb, err := NewSearchMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, tableName)
+	kb, err := kb.NewSearchMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, tableName)
 	if err != nil {
 		log.Printf("Error creating SearchMemDB: %v", err)
 		return
@@ -89,7 +89,7 @@ func ExampleSearchMemDBUsage() {
 }
 
 // Helper function to extract keys from a map
-func getMapKeys(m map[string]*TreeNode) []string {
+func getMapKeys(m map[string]*kb.TreeNode) []string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)
@@ -119,7 +119,7 @@ func ExampleConstructMemDBUsage() {
 	dbPassword := "password" // In real usage, get this securely
 	dbTable := "knowledge_base"
 
-	kb := NewConstructMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, dbTable)
+	kb := kb.NewConstructMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, dbTable)
 
 	// Test KB1
 	err := kb.AddKB("kb1", "First knowledge base")
@@ -249,7 +249,7 @@ func ExampleConstructMemDBUsage() {
 // Example usage function
 func ExampleUsage() {
 	// Initialize the enhanced tree storage system
-	tree := NewBasicConstructDB("localhost", 5432, "knowledge_base", "gedgar", "password", "knowledge_base")
+	tree := kb.NewBasicConstructDB("localhost", 5432, "knowledge_base", "gedgar", "password", "knowledge_base")
 
 	fmt.Println("=== Full ltree-Compatible Tree Storage System ===")
 

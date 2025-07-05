@@ -14,7 +14,7 @@ type SearchMemDB struct {
 	labels          map[string][]string  // Labels mapping
 	names           map[string][]string  // Names mapping
 	decodedKeys     map[string][]string  // Decoded path keys
-	filterResults   map[string]*TreeNode // Current filter results
+	FilterResults   map[string]*TreeNode // Current filter results
 }
 
 // NewSearchMemDB creates a new SearchMemDB instance and loads data from PostgreSQL
@@ -25,7 +25,7 @@ func NewSearchMemDB(host string, port int, dbname, user, password, tableName str
 		labels:           make(map[string][]string),
 		names:            make(map[string][]string),
 		decodedKeys:      make(map[string][]string),
-		filterResults:    make(map[string]*TreeNode),
+		FilterResults:    make(map[string]*TreeNode),
 	}
 
 	// Import data from PostgreSQL
@@ -87,10 +87,10 @@ func (smdb *SearchMemDB) generateDecodedKeys(data map[string]*TreeNode) map[stri
 
 // ClearFilters clears all filters and resets the query state
 func (smdb *SearchMemDB) ClearFilters() {
-	smdb.filterResults = make(map[string]*TreeNode)
+	smdb.FilterResults = make(map[string]*TreeNode)
 	// Copy all data to filter results
 	for key, value := range smdb.data {
-		smdb.filterResults[key] = value
+		smdb.FilterResults[key] = value
 	}
 }
 
@@ -100,14 +100,14 @@ func (smdb *SearchMemDB) SearchKB(knowledgeBase string) map[string]*TreeNode {
 	
 	if kbKeys, exists := smdb.kbs[knowledgeBase]; exists {
 		for _, key := range kbKeys {
-			if _, exists := smdb.filterResults[key]; exists {
-				newFilterResults[key] = smdb.filterResults[key]
+			if _, exists := smdb.FilterResults[key]; exists {
+				newFilterResults[key] = smdb.FilterResults[key]
 			}
 		}
 	}
 	
-	smdb.filterResults = newFilterResults
-	return smdb.filterResults
+	smdb.FilterResults = newFilterResults
+	return smdb.FilterResults
 }
 
 // SearchLabel searches for rows matching the specified label
@@ -116,14 +116,14 @@ func (smdb *SearchMemDB) SearchLabel(label string) map[string]*TreeNode {
 	
 	if labelKeys, exists := smdb.labels[label]; exists {
 		for _, key := range labelKeys {
-			if _, exists := smdb.filterResults[key]; exists {
-				newFilterResults[key] = smdb.filterResults[key]
+			if _, exists := smdb.FilterResults[key]; exists {
+				newFilterResults[key] = smdb.FilterResults[key]
 			}
 		}
 	}
 	
-	smdb.filterResults = newFilterResults
-	return smdb.filterResults
+	smdb.FilterResults = newFilterResults
+	return smdb.FilterResults
 }
 
 // SearchName searches for rows matching the specified name
@@ -132,52 +132,52 @@ func (smdb *SearchMemDB) SearchName(name string) map[string]*TreeNode {
 	
 	if nameKeys, exists := smdb.names[name]; exists {
 		for _, key := range nameKeys {
-			if _, exists := smdb.filterResults[key]; exists {
-				newFilterResults[key] = smdb.filterResults[key]
+			if _, exists := smdb.FilterResults[key]; exists {
+				newFilterResults[key] = smdb.FilterResults[key]
 			}
 		}
 	}
 	
-	smdb.filterResults = newFilterResults
-	return smdb.filterResults
+	smdb.FilterResults = newFilterResults
+	return smdb.FilterResults
 }
 
 // SearchPropertyKey searches for rows that contain the specified property key
 func (smdb *SearchMemDB) SearchPropertyKey(dataKey string) map[string]*TreeNode {
 	newFilterResults := make(map[string]*TreeNode)
 	
-	for key := range smdb.filterResults {
+	for key := range smdb.FilterResults {
 		if node, exists := smdb.data[key]; exists {
 			if dataMap, ok := node.Data.(map[string]interface{}); ok {
 				if _, hasKey := dataMap[dataKey]; hasKey {
-					newFilterResults[key] = smdb.filterResults[key]
+					newFilterResults[key] = smdb.FilterResults[key]
 				}
 			}
 		}
 	}
 	
-	smdb.filterResults = newFilterResults
-	return smdb.filterResults
+	smdb.FilterResults = newFilterResults
+	return smdb.FilterResults
 }
 
 // SearchPropertyValue searches for rows where the properties JSON field contains the specified key with the specified value
 func (smdb *SearchMemDB) SearchPropertyValue(dataKey string, dataValue interface{}) map[string]*TreeNode {
 	newFilterResults := make(map[string]*TreeNode)
 	
-	for key := range smdb.filterResults {
+	for key := range smdb.FilterResults {
 		if node, exists := smdb.data[key]; exists {
 			if dataMap, ok := node.Data.(map[string]interface{}); ok {
 				if value, hasKey := dataMap[dataKey]; hasKey {
 					if value == dataValue {
-						newFilterResults[key] = smdb.filterResults[key]
+						newFilterResults[key] = smdb.FilterResults[key]
 					}
 				}
 			}
 		}
 	}
 	
-	smdb.filterResults = newFilterResults
-	return smdb.filterResults
+	smdb.FilterResults = newFilterResults
+	return smdb.FilterResults
 }
 
 // SearchStartingPath searches for a specific path and all its descendants
@@ -185,11 +185,11 @@ func (smdb *SearchMemDB) SearchStartingPath(startingPath string) (map[string]*Tr
 	newFilterResults := make(map[string]*TreeNode)
 	
 	// Add starting path if it exists in filter results
-	if _, exists := smdb.filterResults[startingPath]; exists {
-		newFilterResults[startingPath] = smdb.filterResults[startingPath]
+	if _, exists := smdb.FilterResults[startingPath]; exists {
+		newFilterResults[startingPath] = smdb.FilterResults[startingPath]
 	} else {
 		// If starting path doesn't exist, clear filter results
-		smdb.filterResults = make(map[string]*TreeNode)
+		smdb.FilterResults = make(map[string]*TreeNode)
 		return newFilterResults, nil
 	}
 	
@@ -200,12 +200,12 @@ func (smdb *SearchMemDB) SearchStartingPath(startingPath string) (map[string]*Tr
 	}
 	
 	for _, item := range descendants {
-		if _, exists := smdb.filterResults[item.Path]; exists {
-			newFilterResults[item.Path] = smdb.filterResults[item.Path]
+		if _, exists := smdb.FilterResults[item.Path]; exists {
+			newFilterResults[item.Path] = smdb.FilterResults[item.Path]
 		}
 	}
 	
-	smdb.filterResults = newFilterResults
+	smdb.FilterResults = newFilterResults
 	return newFilterResults, nil
 }
 
@@ -216,13 +216,13 @@ func (smdb *SearchMemDB) SearchPath(operator, startingPath string) map[string]*T
 	
 	newFilterResults := make(map[string]*TreeNode)
 	for _, item := range searchResults {
-		if _, exists := smdb.filterResults[item.Path]; exists {
-			newFilterResults[item.Path] = smdb.filterResults[item.Path]
+		if _, exists := smdb.FilterResults[item.Path]; exists {
+			newFilterResults[item.Path] = smdb.FilterResults[item.Path]
 		}
 	}
 	
-	smdb.filterResults = newFilterResults
-	return smdb.filterResults
+	smdb.FilterResults = newFilterResults
+	return smdb.FilterResults
 }
 
 // FindDescriptions extracts descriptions from all data entries or a specific key
@@ -253,7 +253,7 @@ func (smdb *SearchMemDB) FindDescriptions(key interface{}) map[string]string {
 func (smdb *SearchMemDB) GetFilterResults() map[string]*TreeNode {
 	// Return a copy to prevent external modification
 	results := make(map[string]*TreeNode)
-	for key, value := range smdb.filterResults {
+	for key, value := range smdb.FilterResults {
 		results[key] = value
 	}
 	return results
@@ -261,8 +261,8 @@ func (smdb *SearchMemDB) GetFilterResults() map[string]*TreeNode {
 
 // GetFilterResultKeys returns just the keys of current filter results
 func (smdb *SearchMemDB) GetFilterResultKeys() []string {
-	keys := make([]string, 0, len(smdb.filterResults))
-	for key := range smdb.filterResults {
+	keys := make([]string, 0, len(smdb.FilterResults))
+	for key := range smdb.FilterResults {
 		keys = append(keys, key)
 	}
 	return keys
