@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	//"strings"
-	kb "github.com/glenn-edgar/knowledge_base/kb_modules/kb_go/kb_memory/kb_memory_module"
+	km "github.com/glenn-edgar/knowledge_base/kb_modules/kb_go/kb_memory/kb_memory_module"
 )
 
 
@@ -20,13 +20,13 @@ func ExampleSearchMemDBUsage() {
 	dbPassword := "password" // In real usage, get this securely
 	tableName := "composite_memory_kb"
 
-	kb, err := kb.NewSearchMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, tableName)
+	kb, err := km.NewSearchMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, tableName)
 	if err != nil {
 		log.Printf("Error creating SearchMemDB: %v", err)
 		return
 	}
 
-	fmt.Printf("Decoded keys: %v\n", getMapKeys(kb.decodedKeys))
+	fmt.Printf("Decoded keys: %v\n", getMapKeys(kb.DecodedKeys))
 	
 	// Test various search operations
 	fmt.Println("----------------------------------")
@@ -34,17 +34,17 @@ func ExampleSearchMemDBUsage() {
 	// Search by knowledge base
 	kb.ClearFilters()
 	kb.SearchKB("kb1")
-	fmt.Printf("Search KB results: %v\n", getMapKeys(kb.filterResults))
+	fmt.Printf("Search KB results: %v\n", getMapKeys(kb.FilterResults))
 	
 	fmt.Println("----------------------------------")
 	
 	// Search by label
 	kb.SearchLabel("info1_link")
-	fmt.Printf("Search label results: %v\n", getMapKeys(kb.filterResults))
+	fmt.Printf("Search label results: %v\n", getMapKeys(kb.FilterResults))
 	
 	// Search by name
 	kb.SearchName("info1_name")
-	fmt.Printf("Search name results: %v\n", getMapKeys(kb.filterResults))
+	fmt.Printf("Search name results: %v\n", getMapKeys(kb.FilterResults))
 	
 	fmt.Println("----------------------------------")
 	
@@ -119,7 +119,7 @@ func ExampleConstructMemDBUsage() {
 	dbPassword := "password" // In real usage, get this securely
 	dbTable := "knowledge_base"
 
-	kb := kb.NewConstructMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, dbTable)
+	kb := km.NewConstructMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, dbTable)
 
 	// Test KB1
 	err := kb.AddKB("kb1", "First knowledge base")
@@ -249,7 +249,7 @@ func ExampleConstructMemDBUsage() {
 // Example usage function
 func ExampleUsage() {
 	// Initialize the enhanced tree storage system
-	tree := kb.NewBasicConstructDB("localhost", 5432, "knowledge_base", "gedgar", "password", "knowledge_base")
+	tree := km.NewBasicConstructDB("localhost", 5432, "knowledge_base", "gedgar", "password", "knowledge_base")
 
 	fmt.Println("=== Full ltree-Compatible Tree Storage System ===")
 
