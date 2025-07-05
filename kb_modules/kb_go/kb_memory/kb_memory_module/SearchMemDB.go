@@ -1,8 +1,8 @@
-package main
+package kb_memory_module
 
 import (
 	"fmt"
-	"log"
+	//"log"
 	"strings"
 )
 
@@ -286,108 +286,5 @@ func (smdb *SearchMemDB) GetNames() map[string][]string {
 // GetDecodedKeys returns all decoded keys
 func (smdb *SearchMemDB) GetDecodedKeys() map[string][]string {
 	return smdb.decodedKeys
-}
-
-// ExampleSearchMemDBUsage demonstrates how to use SearchMemDB
-func ExampleSearchMemDBUsage() {
-	fmt.Println("Starting SearchMemDB example")
-
-	// Replace with your actual database credentials
-	dbHost := "localhost"
-	dbPort := 5432
-	dbName := "knowledge_base"
-	dbUser := "gedgar"
-	dbPassword := "password" // In real usage, get this securely
-	tableName := "composite_memory_kb"
-
-	kb, err := NewSearchMemDB(dbHost, dbPort, dbName, dbUser, dbPassword, tableName)
-	if err != nil {
-		log.Printf("Error creating SearchMemDB: %v", err)
-		return
-	}
-
-	fmt.Printf("Decoded keys: %v\n", getMapKeys(kb.decodedKeys))
-	
-	// Test various search operations
-	fmt.Println("----------------------------------")
-	
-	// Search by knowledge base
-	kb.ClearFilters()
-	kb.SearchKB("kb1")
-	fmt.Printf("Search KB results: %v\n", getMapKeys(kb.filterResults))
-	
-	fmt.Println("----------------------------------")
-	
-	// Search by label
-	kb.SearchLabel("info1_link")
-	fmt.Printf("Search label results: %v\n", getMapKeys(kb.filterResults))
-	
-	// Search by name
-	kb.SearchName("info1_name")
-	fmt.Printf("Search name results: %v\n", getMapKeys(kb.filterResults))
-	
-	fmt.Println("----------------------------------")
-	
-	// Search by property value
-	kb.ClearFilters()
-	results := kb.SearchPropertyValue("data", "info1_data")
-	fmt.Printf("Search property value results: %v\n", getMapKeys(results))
-	
-	fmt.Println("----------------------------------")
-	
-	// Search by property key
-	kb.ClearFilters()
-	results = kb.SearchPropertyKey("data")
-	fmt.Printf("Search property key results: %v\n", getMapKeys(results))
-	
-	fmt.Println("----------------------------------")
-	
-	// Search starting path
-	kb.ClearFilters()
-	results, err = kb.SearchStartingPath("kb2.header2_link.header2_name")
-	if err != nil {
-		log.Printf("Error in SearchStartingPath: %v", err)
-	} else {
-		fmt.Printf("Search starting path results: %v\n", getMapKeys(results))
-	}
-	
-	fmt.Println("----------------------------------")
-	
-	// Search path with operator
-	kb.ClearFilters()
-	results = kb.SearchPath("~", "kb2.**")
-	fmt.Printf("Search path results: %v\n", getMapKeys(results))
-	
-	fmt.Println("----------------------------------")
-	
-	// Find descriptions
-	kb.ClearFilters()
-	descriptions := kb.FindDescriptions("kb2.header2_link.header2_name")
-	fmt.Printf("Find descriptions results: %v\n", descriptions)
-	
-	fmt.Println("----------------------------------")
-}
-
-// Helper function to extract keys from a map
-func getMapKeys(m map[string]*TreeNode) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	return keys
-}
-
-// Helper function to extract keys from string map
-func getStringMapKeys(m map[string][]string) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	return keys
-}
-
-func main() {
-	// Run the example
-	ExampleSearchMemDBUsage()
 }
 

@@ -1,19 +1,20 @@
-package main
+package kb_memory_module
 
 import (
-	"context"
+	//"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	
 	"log"
 	"regexp"
 	"sort"
-	"strconv"
+	//"strconv"
 	"strings"
-	"time"
+	//"time"
 
-	"github.com/lib/pq"
-	_ "github.com/lib/pq"
+	//"github.com/lib/pq"
+	//_ "github.com/lib/pq"
 )
 
 // TreeNode represents a node in the tree with metadata
@@ -925,164 +926,5 @@ func (db *BasicConstructDB) GetAllPaths() []string {
 	}
 	sort.Strings(paths)
 	return paths
-}
-
-// Example usage function
-func ExampleUsage() {
-	// Initialize the enhanced tree storage system
-	tree := NewBasicConstructDB("localhost", 5432, "knowledge_base", "gedgar", "password", "knowledge_base")
-
-	fmt.Println("=== Full ltree-Compatible Tree Storage System ===")
-
-	// Sample data setup
-	sampleData := []struct {
-		path string
-		data map[string]interface{}
-	}{
-		{"company", map[string]interface{}{"name": "TechCorp", "type": "corporation"}},
-		{"company.engineering", map[string]interface{}{"name": "Engineering", "type": "department"}},
-		{"company.engineering.backend", map[string]interface{}{"name": "Backend Team", "type": "team"}},
-		{"company.engineering.backend.api", map[string]interface{}{"name": "API Service", "type": "service"}},
-		{"company.engineering.backend.database", map[string]interface{}{"name": "Database Team", "type": "service"}},
-		{"company.engineering.frontend", map[string]interface{}{"name": "Frontend Team", "type": "team"}},
-		{"company.engineering.frontend.web", map[string]interface{}{"name": "Web App", "type": "service"}},
-		{"company.engineering.frontend.mobile", map[string]interface{}{"name": "Mobile App", "type": "service"}},
-		{"company.marketing", map[string]interface{}{"name": "Marketing", "type": "department"}},
-		{"company.marketing.digital", map[string]interface{}{"name": "Digital Marketing", "type": "team"}},
-		{"company.marketing.content", map[string]interface{}{"name": "Content Team", "type": "team"}},
-		{"company.sales", map[string]interface{}{"name": "Sales", "type": "department"}},
-		{"company.sales.enterprise", map[string]interface{}{"name": "Enterprise Sales", "type": "team"}},
-		{"company.sales.smb", map[string]interface{}{"name": "SMB Sales", "type": "team"}},
-	}
-
-	// Store sample data
-	for _, item := range sampleData {
-		err := tree.Store(item.path, item.data, nil, nil)
-		if err != nil {
-			log.Printf("Error storing %s: %v", item.path, err)
-		}
-	}
-
-	fmt.Printf("Stored %d nodes\n", len(sampleData))
-
-	// Demonstrate full ltree query capabilities
-	fmt.Println("\n=== Full ltree Query Demonstrations ===")
-
-	// 1. Basic pattern matching
-	fmt.Println("\n1. Basic pattern queries:")
-
-	fmt.Println("  a) All direct children of engineering:")
-	results := tree.Query("company.engineering.*")
-	for _, r := range results {
-		if dataMap, ok := r.Data.(map[string]interface{}); ok {
-			fmt.Printf("    %s: %s\n", r.Path, dataMap["name"])
-		}
-	}
-
-	fmt.Println("  b) All descendants of engineering:")
-	results = tree.Query("company.engineering.**")
-	for _, r := range results {
-		if dataMap, ok := r.Data.(map[string]interface{}); ok {
-			fmt.Printf("    %s: %s\n", r.Path, dataMap["name"])
-		}
-	}
-
-	// 2. Ancestor tests (@>)
-	fmt.Println("\n2. @ Operator Tests:")
-	fmt.Println("  a) Ancestor relationships (@>):")
-	testPairs := [][]string{
-		{"company", "company.engineering.backend"},
-		{"company.engineering", "company.engineering.backend.api"},
-		{"company.sales", "company.engineering.backend"},
-	}
-
-	for _, pair := range testPairs {
-		ancestor, descendant := pair[0], pair[1]
-		isAncestor := tree.LtreeAncestor(ancestor, descendant)
-		fmt.Printf("    '%s' @> '%s': %t\n", ancestor, descendant, isAncestor)
-	}
-
-	// Query using @> operator
-	fmt.Println("  b) Find all descendants of 'company.engineering' using @> operator:")
-	results = tree.QueryByOperator("@>", "company.engineering", "")
-	for _, r := range results {
-		if dataMap, ok := r.Data.(map[string]interface{}); ok {
-			fmt.Printf("    %s: %s\n", r.Path, dataMap["name"])
-		}
-	}
-
-	// 3. ltxtquery (@@ operator) demonstrations
-	fmt.Println("\n3. ltxtquery (@@ operator) Tests:")
-
-	fmt.Println("  a) Find paths containing 'engineering':")
-	results = tree.QueryLtxtquery("engineering")
-	for _, r := range results {
-		if dataMap, ok := r.Data.(map[string]interface{}); ok {
-			fmt.Printf("    %s: %s\n", r.Path, dataMap["name"])
-		}
-	}
-
-	// 4. ltree functions
-	fmt.Println("\n4. ltree Function Tests:")
-
-	testPath := "company.engineering.backend.api"
-	fmt.Printf("  Path: %s\n", testPath)
-	fmt.Printf("  nlevel(): %d\n", tree.Nlevel(testPath))
-	fmt.Printf("  subpath(1, 2): %s\n", tree.SubpathFunc(testPath, 1, func() *int { i := 2; return &i }()))
-	fmt.Printf("  subltree(1, 3): %s\n", tree.Subltree(testPath, 1, 3))
-	fmt.Printf("  index('engineering'): %d\n", tree.IndexFunc(testPath, "engineering", 0))
-
-	// LCA test
-	fmt.Println("\n  Longest Common Ancestor (LCA):")
-	testPaths := []string{
-		"company.engineering.backend.api",
-		"company.engineering.backend.database",
-		"company.engineering.frontend.web",
-	}
-	lcaResult := tree.LCA(testPaths...)
-	if lcaResult != nil {
-		fmt.Printf("    LCA of %v: %s\n", testPaths, *lcaResult)
-	} else {
-		fmt.Printf("    LCA of %v: nil\n", testPaths)
-	}
-
-	// 5. Tree statistics
-	fmt.Println("\n5. Tree Statistics:")
-	stats := tree.GetStats()
-	fmt.Printf("  total_nodes: %d\n", stats.TotalNodes)
-	fmt.Printf("  max_depth: %d\n", stats.MaxDepth)
-	fmt.Printf("  avg_depth: %.2f\n", stats.AvgDepth)
-	fmt.Printf("  root_nodes: %d\n", stats.RootNodes)
-	fmt.Printf("  leaf_nodes: %d\n", stats.LeafNodes)
-
-	// 6. PostgreSQL integration example
-	fmt.Println("\n6. PostgreSQL Integration Example:")
-
-	// Export to PostgreSQL
-	exported, err := tree.ExportToPostgres(tree.tableName, true, false)
-	if err != nil {
-		fmt.Printf("Export error: %v\n", err)
-	} else {
-		fmt.Printf("Exported %d records\n", exported)
-	}
-
-	// Import from PostgreSQL
-	imported, err := tree.ImportFromPostgres(tree.tableName, "path", "data", "created_at", "updated_at")
-	if err != nil {
-		fmt.Printf("Import error: %v\n", err)
-	} else {
-		fmt.Printf("Imported %d records\n", imported)
-	}
-
-	// Bidirectional sync
-	syncStats := tree.SyncWithPostgres("both")
-	fmt.Printf("Sync stats: imported=%d, exported=%d\n", syncStats.Imported, syncStats.Exported)
-
-	fmt.Printf("\n=== System Ready - %d nodes loaded ===\n", tree.Size())
-}
-
-func main() {
-	// Run the example
-	ExampleUsage()
 }
 

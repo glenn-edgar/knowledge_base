@@ -1,0 +1,4 @@
+github.com/glenn-edgar/knowledge_base v0.0.0-20250705165101-94a6ecac6e43 h1:ZhAUsvOlXMKjB4hugdP3wpXPpujVdNpx/JkGPfiD4hc=
+github.com/glenn-edgar/knowledge_base v0.0.0-20250705165101-94a6ecac6e43/go.mod h1:m9txsPJxeUtoxOz25um1Covc96zs7LZ2QPvc5O2Nqwc=
+github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
+github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
