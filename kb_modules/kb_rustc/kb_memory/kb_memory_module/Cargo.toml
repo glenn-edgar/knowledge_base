@@ -1,0 +1,21 @@
+[package]
+name = "kb_memory_module"
+version = "0.1.0"
+edition = "2021"
+
+# Define library target
+[lib]
+name = "kb_memory_module"
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+regex = "1.0"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"] }
+tokio = { version = "1.0", features = ["full"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
