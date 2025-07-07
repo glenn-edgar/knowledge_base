@@ -1,5 +1,0 @@
-# Rust/Cargo build folder
-/target/
-
-# Rust library files (if you ever check them in by mistake)
-/**/*.rlib
