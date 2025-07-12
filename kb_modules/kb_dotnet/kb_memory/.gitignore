@@ -1,0 +1,17 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.cache
+*.docstates
+_ReSharper*/
+[Tt]est[Rr]esult*
+.vs/
+.vscode/
+*.userprefs
+*.pidb
+*.booproj
+*~
+*.swp
+*.DS_Store
