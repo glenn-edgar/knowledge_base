@@ -141,7 +141,7 @@ if __name__ == '__main__':
     DB_NAME = "knowledge_base"
     DB_USER = "gedgar"
     DB_PASSWORD = password
-    DB_TABLE = "knowledge_base"
+    DB_TABLE = 'composite_memory_kb'
 
     print("starting unit test")
     kb = ConstructMemDB(DB_HOST,DB_PORT,DB_NAME,DB_USER,DB_PASSWORD,DB_TABLE)
@@ -182,7 +182,7 @@ if __name__ == '__main__':
     # Example of check_installation
     try:
         kb.check_installation()
-        print(kb.export_to_postgres(table_name='composite_memory_kb',create_table=True,clear_existing=True))
+        print(kb.export_to_postgres(create_table=True,clear_existing=True))
         print(kb.import_from_postgres(table_name='composite_memory_kb'))
     except RuntimeError as e:
         print(f"Error during installation check: {e}")

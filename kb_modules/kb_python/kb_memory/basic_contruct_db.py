@@ -7,6 +7,7 @@ from psycopg2.extras import RealDictCursor
 from typing import Dict, List, Any, Optional, Union, Set, Tuple
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 
 #
 #
@@ -20,13 +21,25 @@ from dataclasses import dataclass
 #
 
 @dataclass
+
+
+
 class TreeNode:
     """Represents a node in the tree with metadata."""
-     
-    path: str
-    data: Any
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+
+    def __init__(
+        self,
+        path: str,
+        data: Any,
+        created_at: Optional[str] = None,
+        updated_at: Optional[str] = None
+    ):
+        self.path = path
+        self.data = data
+        current_time = datetime.now().isoformat()
+        self.created_at = created_at if created_at is not None else current_time
+        self.updated_at = updated_at if updated_at is not None else current_time
+
 
 class BasicConstructDB:
     """
@@ -574,29 +587,31 @@ class BasicConstructDB:
             yield conn
         finally:
             conn.close()
-    
     def import_from_postgres(self,
-                           table_name: str = 'tree_data',
-                           path_column: str = 'path',
-                           data_column: str = 'data',
-                           created_at_column: str = 'created_at',
-                           updated_at_column: str = 'updated_at') -> int:
+                            table_name: str = "None",
+                            path_column: str = 'path',
+                            data_column: str = 'data',
+                            created_at_column: str | None = 'created_at',
+                            updated_at_column: str | None = 'updated_at') -> int:
         """
         Import data from a PostgreSQL table with ltree column.
         
         Args:
-            connection_params: Database connection parameters
             table_name: Name of the source table
             path_column: Name of the ltree path column
             data_column: Name of the data column (should be JSONB)
-            created_at_column: Name of the created_at timestamp column
-            updated_at_column: Name of the updated_at timestamp column
+            created_at_column: Name of the created_at timestamp column (optional)
+            updated_at_column: Name of the updated_at timestamp column (optional)
             
         Returns:
             Number of records imported
         """
+        if table_name == "None":
+            table_name = self.table_name
+            
         with self._get_pg_connection(self.connection_params) as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            
                 # Check if table exists
                 cur.execute("""
                     SELECT EXISTS (
@@ -608,13 +623,44 @@ class BasicConstructDB:
                 if not cur.fetchone()['exists']:
                     raise ValueError(f"Table '{table_name}' does not exist")
                 
+                # Get existing columns and types
+                cur.execute("""
+                    SELECT column_name, data_type
+                    FROM information_schema.columns 
+                    WHERE table_name = %s;
+                """, (table_name,))
+                columns_info = {row['column_name']: row['data_type'].lower() for row in cur.fetchall()}
+                
+                # Validate required columns
+                if path_column not in columns_info:
+                    raise ValueError(f"Column '{path_column}' does not exist in table '{table_name}'")
+                if data_column not in columns_info:
+                    raise ValueError(f"Column '{data_column}' does not exist in table '{table_name}'")
+                
+                # Validate data column type
+                data_type = columns_info.get(data_column)
+                if data_type not in ['json', 'jsonb']:
+                    raise ValueError(f"Column '{data_column}' must be of type JSON or JSONB, but is {data_type}")
+                
+                # Build select fields
+                select_fields = [
+                    f"{path_column}::text as path",
+                    data_column
+                ]
+                
+                if created_at_column and created_at_column in columns_info:
+                    if columns_info[created_at_column] not in ['timestamp without time zone', 'timestamp with time zone']:
+                        raise ValueError(f"Column '{created_at_column}' must be of type TIMESTAMP, but is {columns_info[created_at_column]}")
+                    select_fields.append(f"{created_at_column}::text as created_at")
+                
+                if updated_at_column and updated_at_column in columns_info:
+                    if columns_info[updated_at_column] not in ['timestamp without time zone', 'timestamp with time zone']:
+                        raise ValueError(f"Column '{updated_at_column}' must be of type TIMESTAMP, but is {columns_info[updated_at_column]}")
+                    select_fields.append(f"{updated_at_column}::text as updated_at")
+                
                 # Import data
                 cur.execute(f"""
-                    SELECT 
-                        {path_column}::text as path,
-                        {data_column},
-                        {created_at_column}::text as created_at,
-                        {updated_at_column}::text as updated_at
+                    SELECT {', '.join(select_fields)}
                     FROM {table_name}
                     ORDER BY {path_column};
                 """)
@@ -624,12 +670,18 @@ class BasicConstructDB:
                     path = row['path']
                     data = row[data_column]
                     
-                    # Handle JSON data
+                    # Handle JSON data if it's a string (for JSON type)
                     if isinstance(data, str):
                         try:
                             data = json.loads(data)
-                        except json.JSONDecodeError:
-                            pass
+                        except json.JSONDecodeError as e:
+                            raise ValueError(f"Invalid JSON in '{data_column}' for path '{path}': {e}")
+                    
+                    # Ensure data is valid JSON-serializable (dict, list, etc.)
+                    try:
+                        json.dumps(data)
+                    except (TypeError, ValueError):
+                        raise ValueError(f"Data in '{data_column}' for path '{path}' is not valid JSON-serializable")
                     
                     self.store(
                         path=path,
@@ -640,16 +692,16 @@ class BasicConstructDB:
                     imported_count += 1
                 
                 return imported_count
-    
+                
+                
     def export_to_postgres(self, 
-                          table_name: str = 'tree_data',
-                          create_table: bool = True,
-                          clear_existing: bool = False) -> int:
+                        table_name: str = "None",
+                        create_table: bool = True,
+                        clear_existing: bool = False) -> int:
         """
         Export data to a PostgreSQL table with ltree support.
         
         Args:
-            connection_params: Database connection parameters
             table_name: Name of the target table
             create_table: Whether to create the table if it doesn't exist
             clear_existing: Whether to clear existing data in the table
@@ -657,6 +709,9 @@ class BasicConstructDB:
         Returns:
             Number of records exported
         """
+        if table_name == "None":
+            table_name = self.table_name
+            
         with self._get_pg_connection(self.connection_params) as conn:
             with conn.cursor() as cur:
                 # Enable ltree extension
@@ -686,12 +741,15 @@ class BasicConstructDB:
                 
                 for path, node in self.data.items():
                     try:
+                        
+                      
                         cur.execute(f"""
                             INSERT INTO {table_name} (path, data, created_at, updated_at)
                             VALUES (%s, %s, %s, %s)
                             ON CONFLICT (path) 
                             DO UPDATE SET 
                                 data = EXCLUDED.data,
+                                created_at = EXCLUDED.created_at,
                                 updated_at = EXCLUDED.updated_at;
                         """, (
                             path,
@@ -784,7 +842,7 @@ class BasicConstructDB:
 if __name__ == "__main__":
     password = input("Enter PostgreSQL password: ")
     # Initialize the enhanced tree storage system
-    tree = BasicConstructDB(host='localhost',port=5432,dbname='knowledge_base',user='gedgar',password=password,table_name='knowledge_base')
+    tree = BasicConstructDB(host='localhost',port=5432,dbname='knowledge_base',user='gedgar',password=password,table_name='tree_data')
     
     print("=== Full ltree-Compatible Tree Storage System ===")
     
@@ -958,6 +1016,8 @@ if __name__ == "__main__":
     print("  # Import from PostgreSQL")
     imported = tree.import_from_postgres()
     print(f'Imported {imported} records')
+    
+   
     
     # Bidirectional sync"
     stats = tree.sync_with_postgres( direction='both')
