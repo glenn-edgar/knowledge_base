@@ -10,7 +10,7 @@
     "test:data": "npm run build && node dist/testConstructDataTables.js"
   },
   "dependencies": {
-    "pg": "^8.10.0",
+    "pg": "^8.16.3",
     "prompt-sync": "^4.2.0",
     "uuid": "^11.1.0"
   },
@@ -23,4 +23,3 @@
     "typescript": "^4.9.5"
   }
 }
-
