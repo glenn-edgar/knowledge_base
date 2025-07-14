@@ -380,17 +380,21 @@ int mark_job_completed(JobQueueContext *self, int job_id, int max_retries, doubl
 
 // push_job_data: Update an available job slot with new data
 
-int push_job_data(JobQueueContext *self, const char *path, const char *data, int max_retries, double retry_delay,char *message) {
+int push_job_data(JobQueueContext *self, const char *path, const char *data, int max_retries, double retry_delay, char *message) {
+    if (!self || !self->kb_search) {
+        fprintf(stderr, "Invalid JobQueueContext or database connection\n");
+        if (message) snprintf(message, 256, "Invalid JobQueueContext or database connection");
+        return -1;
+    }
+
     if (!path || strlen(path) == 0) {
         fprintf(stderr, "Path cannot be empty or NULL\n");
         if (message) snprintf(message, 256, "Path cannot be empty or NULL");
-        
         return -1;
     }
     if (!data || strlen(data) == 0) {
         fprintf(stderr, "Data cannot be empty or NULL\n");
         if (message) snprintf(message, 256, "Data cannot be empty or NULL");
-        
         return -1;
     }
 
@@ -399,14 +403,14 @@ int push_job_data(JobQueueContext *self, const char *path, const char *data, int
         "SELECT id FROM %s "
         "WHERE path = $1 AND valid = FALSE "
         "ORDER BY completed_at ASC "
-        "FOR UPDATE SKIP LOCKED "
+        "FOR UPDATE NOWAIT "
         "LIMIT 1", self->base_table);
 
     char update_query[512];
     snprintf(update_query, sizeof(update_query),
         "UPDATE %s "
         "SET data = $1, schedule_at = timezone('UTC', NOW()), "
-        "started_at = timezone('UTC', NOW()), completed_at = timezone('UTC', NOW()), "
+        "started_at = NULL, completed_at = NULL, "
         "valid = TRUE, is_active = FALSE "
         "WHERE id = $2 "
         "RETURNING id", self->base_table);
@@ -419,7 +423,6 @@ int push_job_data(JobQueueContext *self, const char *path, const char *data, int
             fprintf(stderr, "Error starting transaction: %s\n", PQresultErrorMessage(begin_res));
             if (message) snprintf(message, 256, "Error starting transaction: %s", PQresultErrorMessage(begin_res));
             PQclear(begin_res);
-        
             return -1;
         }
         PQclear(begin_res);
@@ -427,7 +430,7 @@ int push_job_data(JobQueueContext *self, const char *path, const char *data, int
         // Select job
         const char *select_params[1] = {path};
         int select_lengths[1] = {(int)strlen(path)};
-        int param_formats[1] = {0};
+        int param_formats[2] = {0, 0};  // Sized for max params (update uses 2)
         PGresult *res = PQexecParams(self->kb_search, select_query, 1, NULL, select_params, select_lengths, param_formats, 0);
         ExecStatusType status = PQresultStatus(res);
 
@@ -439,8 +442,6 @@ int push_job_data(JobQueueContext *self, const char *path, const char *data, int
             status = PQresultStatus(update_res);
 
             if (status == PGRES_TUPLES_OK && PQntuples(update_res) > 0) {
-                
-
                 // Commit transaction
                 PGresult *commit_res = PQexec(self->kb_search, "COMMIT");
                 if (PQresultStatus(commit_res) != PGRES_COMMAND_OK) {
@@ -449,7 +450,6 @@ int push_job_data(JobQueueContext *self, const char *path, const char *data, int
                     PQclear(commit_res);
                     PQclear(update_res);
                     PQclear(res);
-                    
                     return -1;
                 }
                 PQclear(commit_res);
@@ -464,7 +464,6 @@ int push_job_data(JobQueueContext *self, const char *path, const char *data, int
                 PQclear(res);
                 fprintf(stderr, "Failed to update job slot for path '%s'\n", path);
                 if (message) snprintf(message, 256, "Failed to update job slot for path '%s'", path);
-                
                 return -1;
             }
         } else if (status == PGRES_TUPLES_OK) {
@@ -474,9 +473,8 @@ int push_job_data(JobQueueContext *self, const char *path, const char *data, int
             PQclear(res);
             fprintf(stderr, "No available job slot for path '%s'\n", path);
             if (message) snprintf(message, 256, "No available job slot for path '%s'", path);
-        
             return -1;
-        } else if (strstr(PQresultErrorMessage(res), "lock not available")) {
+        } else if (strstr(PQresultErrorMessage(res), "could not obtain lock")) {
             // Rollback transaction
             PGresult *rollback_res = PQexec(self->kb_search, "ROLLBACK");
             PQclear(rollback_res);
@@ -491,14 +489,12 @@ int push_job_data(JobQueueContext *self, const char *path, const char *data, int
             fprintf(stderr, "Error pushing job data for path '%s': %s\n", path, PQresultErrorMessage(res));
             if (message) snprintf(message, 256, "Error pushing job data for path '%s': %s", path, PQresultErrorMessage(res));
             PQclear(res);
-        
             return -1;
         }
     }
 
     fprintf(stderr, "Could not acquire lock for path '%s' after %d attempts\n", path, max_retries);
     if (message) snprintf(message, 256, "Could not acquire lock for path '%s' after %d attempts", path, max_retries);
-    
     return -1;
 }
 
@@ -633,6 +629,37 @@ int main(void){
     if (job_info.found == 1) {
         free(job_info.data);
     }
+
+    const char *push_data = "{\"prop1\": \"val1\", \"prop2\": \"val2\"}";
+    printf("push_data: %s\n", push_data);
+    success = push_job_data(&context, queue_path, push_data, 3, 1.0, NULL);
+    printf("success: %d\n", success);
+    success = get_queued_number(&context, queue_path, &queued_number, NULL);
+    printf("queued_number: %d %d\n", queued_number, success);
+    
+    success = get_free_number(&context, queue_path, &free_number, NULL);
+    printf("free_number: %d %d\n", free_number, success);
+    success = peak_job_data(&context, queue_path, 3, 1.0, &job_info, NULL);
+    printf("success: %d\n", success);
+    printf("job_info.found: %d\n", job_info.found);
+    printf("job_info.id: %d\n", job_info.id);
+    printf("job_info.data: %s\n", job_info.data);
+    if (job_info.found == 1) {
+        free(job_info.data);
+    }
+    
+    success = get_free_number(&context, queue_path, &free_number, NULL);
+    printf("free_number: %d %d\n", free_number, success);
+    success = peak_job_data(&context, queue_path, 3, 1.0, &job_info, NULL);
+    printf("success: %d\n", success);
+    success = get_free_number(&context, queue_path, &free_number, NULL);
+    printf("free_number: %d %d\n", free_number, success);
+    
+    
+    success = mark_job_completed(&context, job_info.id, 3, 1.0, NULL);
+    printf("success: %d\n", success);
+    success = get_free_number(&context, queue_path, &free_number, NULL);
+    printf("free_number: %d %d\n", free_number, success);
     
     return 0;
     
