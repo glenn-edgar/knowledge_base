@@ -1,10 +1,12 @@
+#include "system_def.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <libpq-fe.h> // PostgreSQL library
 #include <unistd.h> // For usleep
 #include "kb_status_table.h"
-#define __MAIN__
+
 
 
 // Function to retrieve status data for a given path

@@ -1,4 +1,4 @@
-#define __MAIN__
+#include "system_def.h"
 #include <libpq-fe.h>
 #include <stdio.h>
 #include <stdlib.h>
