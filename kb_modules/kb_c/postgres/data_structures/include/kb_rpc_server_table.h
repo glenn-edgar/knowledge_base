@@ -25,7 +25,7 @@ int count_processing_jobs(PGconn *conn, const char *base_table, const char *serv
 int count_new_jobs(PGconn *conn, const char *base_table, const char *server_path);
 int count_empty_jobs(PGconn *conn, const char *base_table, const char *server_path);
 
-ServerRow *push_rpc_queue(PGconn *conn, const char *base_table, const char *server_path,
+ServerRow *push_rpc_server_queue(PGconn *conn, const char *base_table, const char *server_path,
     const char *request_id, const char *rpc_action, const char *request_payload_json, const char *transaction_tag,
     int priority, const char *rpc_client_queue, int max_retries, float wait_time);
 ServerRow *peak_server_queue(PGconn *conn, const char *base_table, const char *server_path, int retries, float wait_time);
