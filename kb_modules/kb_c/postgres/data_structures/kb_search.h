@@ -52,23 +52,44 @@ char **find_path_values(KBRow *rows, int num_rows, int *out_num);
 void kb_rows_free(KBRow *rows, int num);
 
 // RPC Server functions
-KBRow *find_rpc_server_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
-KBRow *find_rpc_server_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
+KBRow *find_rpc_server_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name,
+     const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
+
+KBRow *find_rpc_server_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, 
+    const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
 
 // RPC Client functions
-KBRow *find_rpc_client_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
-KBRow *find_rpc_client_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
+KBRow *find_rpc_client_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, 
+    const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
+    
+KBRow *find_rpc_client_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, 
+    const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
 
 // Job functions
-KBRow *find_job_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
-KBRow *find_job_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
+KBRow *find_job_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name,
+     const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
+
+KBRow *find_job_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name,
+     const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
 
 // Stream functions
-KBRow *find_stream_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
-KBRow *find_stream_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
+KBRow *find_stream_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, 
+    const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
+
+KBRow *find_stream_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name,
+     const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
 
 // Status node functions
-KBRow *find_status_node_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
-KBRow *find_status_node_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
+KBRow *find_status_node_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, 
+    const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
+
+KBRow *find_status_node_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, 
+    const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
+
+KBRow *find_node_ids(PGconn *conn, const char *base_table, const char *kb, const char *label, const char *node_name, 
+    const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
+
+KBRow *find_node_id(PGconn *conn, const char *base_table, const char *kb, const char *label, const char *node_name,
+     const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
 
 #endif

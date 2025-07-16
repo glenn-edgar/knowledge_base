@@ -17,3 +17,6 @@ rm *.o
 cp libkb_data_structures.so libs/libkb_data_structures_shared.so
 cp libkb_data_structures.a libs/libkb_data_structures_static.a
 cp *.h include/
+
+rm libkb_data_structures.so 
+rm libkb_data_structures.a 

@@ -696,6 +696,7 @@ KBRow *find_status_node_id(PGconn *conn, const char *base_table, const char *kb,
 
     KBRow *single = malloc(sizeof(KBRow));
     if (!single) {
+        fprintf(stderr, "Failed to allocate memory for single node\n");
         kb_rows_free(rows, num);
         return NULL;
     }
@@ -713,10 +714,101 @@ KBRow *find_status_node_id(PGconn *conn, const char *base_table, const char *kb,
     kb_rows_free(rows, num);
     return single;
 }
-KBRow *find_status_node_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, 
-    const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results);
-KBRow *find_status_node_id(PGconn *conn, const char *base_table, const char *kb, 
-    const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path);
+
+
+KBRow *find_node_ids(PGconn *conn, const char *base_table, const char *kb, const char *label, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+    KBQuery *q = kb_query_new(base_table);
+    if (!q) {
+        *num_results = 0;
+        return NULL;
+    }
+    
+    
+    if (kb) kb_query_search_kb(q, kb);
+    if (label) kb_query_search_label(q, label);
+    if (node_name) kb_query_search_name(q, node_name);
+    for (int i = 0; i < num_props; i++) {
+        if (prop_keys[i] && prop_values[i]) {
+            kb_query_search_property_value(q, prop_keys[i], prop_values[i]);
+        }
+    }
+    if (node_path) kb_query_search_path(q, node_path);
+
+    if (kb_query_execute(q, conn) < 0) {
+        kb_query_free(q);
+        *num_results = 0;
+        return NULL;
+    }
+
+    int nr;
+    KBRow *orig = kb_query_get_results(q, &nr);
+
+    if (nr == 0) {
+        fprintf(stderr, "No node found matching path parameters\n");
+        kb_query_free(q);
+        *num_results = 0;
+        return NULL;
+    }
+
+    KBRow *copy = malloc(nr * sizeof(KBRow));
+    if (!copy) {
+        kb_query_free(q);
+        *num_results = 0;
+        return NULL;
+    }
+
+    for (int i = 0; i < nr; i++) {
+        copy[i].id = orig[i].id;
+        copy[i].knowledge_base = orig[i].knowledge_base ? strdup(orig[i].knowledge_base) : NULL;
+        copy[i].label = orig[i].label ? strdup(orig[i].label) : NULL;
+        copy[i].name = orig[i].name ? strdup(orig[i].name) : NULL;
+        copy[i].properties = orig[i].properties ? strdup(orig[i].properties) : NULL;
+        copy[i].data = orig[i].data ? strdup(orig[i].data) : NULL;
+        copy[i].has_link = orig[i].has_link;
+        copy[i].has_link_mount = orig[i].has_link_mount;
+        copy[i].path = orig[i].path ? strdup(orig[i].path) : NULL;
+    }
+
+    *num_results = nr;
+    kb_query_free(q);
+    return copy;
+}
+
+KBRow *find_node_id(PGconn *conn, const char *base_table, const char *kb,const char *label, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+    int num;
+    KBRow *rows = find_node_ids(conn, base_table, kb, label, node_name, prop_keys, prop_values, num_props, node_path, &num);
+    if (!rows) {
+        return NULL;
+    }
+    if (num != 1) {
+        fprintf(stderr, "Multiple nodes found matching path parameters\n");
+        kb_rows_free(rows, num);
+        return NULL;
+    }
+
+    KBRow *single = malloc(sizeof(KBRow));
+    if (!single) {
+        kb_rows_free(rows, num);
+        return NULL;
+    }
+
+    single->id = rows[0].id;
+    single->knowledge_base = rows[0].knowledge_base ? strdup(rows[0].knowledge_base) : NULL;
+    single->label = rows[0].label ? strdup(rows[0].label) : NULL;
+    single->name = rows[0].name ? strdup(rows[0].name) : NULL;
+    single->properties = rows[0].properties ? strdup(rows[0].properties) : NULL;
+    single->data = rows[0].data ? strdup(rows[0].data) : NULL;
+    single->has_link = rows[0].has_link;
+    single->has_link_mount = rows[0].has_link_mount;
+    single->path = rows[0].path ? strdup(rows[0].path) : NULL;
+
+    kb_rows_free(rows, num);
+    return single;
+}
+
+
+
+
 
 #ifdef __MAIN__
 
@@ -928,7 +1020,37 @@ void find_rpc_client_tables(PGconn *conn, const char *base_table){
     kb_query_free(q);
 }
 
+void find_node_tables(PGconn *conn, const char *base_table){
+    printf("-------------------------------- find_node_tables\n");
+    printf("-------------------------------- search for status nodes using label\n");
+    KBQuery *q = kb_query_new(base_table);
+    if (!q) {
+        fprintf(stderr, "Failed to create KBQuery\n");
+        return;
+    }
 
+    int num;
+    KBRow *rows = find_node_ids(conn,base_table,NULL,"KB_STATUS_FIELD",NULL,NULL,NULL,0,NULL,&num);
+    if (!rows) {
+        fprintf(stderr, "No nodes found matching path parameters\n");
+        kb_query_free(q);
+        return;
+    }
+    printf("number of rows: %d\n", num);
+    for (int i = 0; i < num; i++) {
+        printf("id: %d\n", rows[i].id);
+        printf("knowledge_base: %s\n", rows[i].knowledge_base);
+        printf("label: %s\n", rows[i].label);
+        printf("name: %s\n", rows[i].name);
+        printf("properties: %s\n", rows[i].properties);
+        printf("data: %s\n", rows[i].data);
+        printf("has_link: %d\n", rows[i].has_link);
+        printf("has_link_mount: %d\n", rows[i].has_link_mount);
+        printf("path: %s\n", rows[i].path);
+    }
+    kb_rows_free(rows, num);
+    kb_query_free(q);
+}
 
 
 int main(void){
@@ -946,6 +1068,7 @@ int main(void){
     find_job_tables(conn, "knowledge_base");
     find_rpc_server_tables(conn, "knowledge_base");
     find_rpc_client_tables(conn, "knowledge_base");
+    find_node_tables(conn, "knowledge_base");
     
 }
 #endif
