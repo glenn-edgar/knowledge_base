@@ -157,7 +157,8 @@ void kb_query_search_path(KBQuery *q, const char *path_expression) {
     add_filter(q, "path ~ $%d", strdup(path_expression));
 }
 
-int kb_query_execute(KBQuery *q, PGconn *conn) {
+int kb_query_execute(KBQuery *q, void *connection) {
+    PGconn *conn = (PGconn *)connection;
     if (PQstatus(conn) != CONNECTION_OK) {
         fprintf(stderr, "Connection is not OK\n");
         return -1;
@@ -250,7 +251,8 @@ char **find_path_values(KBRow *rows, int num_rows, int *out_num) {
     }
     return paths;
 }
-KBRow *find_rpc_server_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+KBRow *find_rpc_server_ids(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+    PGconn *conn = (PGconn *)connection;
     KBQuery *q = kb_query_new(base_table);
     if (!q) {
         *num_results = 0;
@@ -307,7 +309,8 @@ KBRow *find_rpc_server_ids(PGconn *conn, const char *base_table, const char *kb,
     return copy;
 }
 
-KBRow *find_rpc_server_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+KBRow *find_rpc_server_id(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+    PGconn *conn = (PGconn *)connection;
     int num;
     KBRow *rows = find_rpc_server_ids(conn, base_table, kb, node_name, prop_keys, prop_values, num_props, node_path, &num);
     if (!rows) {
@@ -353,7 +356,8 @@ void kb_rows_free(KBRow *rows, int num) {
     }
 }
 
-KBRow *find_rpc_client_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+KBRow *find_rpc_client_ids(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+    PGconn *conn = (PGconn *)connection;
     KBQuery *q = kb_query_new(base_table);
     if (!q) {
         *num_results = 0;
@@ -410,7 +414,8 @@ KBRow *find_rpc_client_ids(PGconn *conn, const char *base_table, const char *kb,
     return copy;
 }
 
-KBRow *find_rpc_client_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+KBRow *find_rpc_client_id(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+    PGconn *conn = (PGconn *)connection;
     int num;
     KBRow *rows = find_rpc_client_ids(conn, base_table, kb, node_name, prop_keys, prop_values, num_props, node_path, &num);
     if (!rows) {
@@ -445,7 +450,8 @@ KBRow *find_rpc_client_id(PGconn *conn, const char *base_table, const char *kb, 
 
 
 
-KBRow *find_job_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+KBRow *find_job_ids(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+    PGconn *conn = (PGconn *)connection;
     KBQuery *q = kb_query_new(base_table);
     if (!q) {
         *num_results = 0;
@@ -502,7 +508,8 @@ KBRow *find_job_ids(PGconn *conn, const char *base_table, const char *kb, const 
     return copy;
 }
 
-KBRow *find_job_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+KBRow *find_job_id(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+    PGconn *conn = (PGconn *)connection;
     int num;
     KBRow *rows = find_job_ids(conn, base_table, kb, node_name, prop_keys, prop_values, num_props, node_path, &num);
     if (!rows) {
@@ -535,7 +542,8 @@ KBRow *find_job_id(PGconn *conn, const char *base_table, const char *kb, const c
 }
 
 
-KBRow *find_stream_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+KBRow *find_stream_ids(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+    PGconn *conn = (PGconn *)connection;
     KBQuery *q = kb_query_new(base_table);
     if (!q) {
         *num_results = 0;
@@ -592,7 +600,8 @@ KBRow *find_stream_ids(PGconn *conn, const char *base_table, const char *kb, con
     return copy;
 }
 
-KBRow *find_stream_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+KBRow *find_stream_id(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+    PGconn *conn = (PGconn *)connection;
     int num;
     KBRow *rows = find_stream_ids(conn, base_table, kb, node_name, prop_keys, prop_values, num_props, node_path, &num);
     if (!rows) {
@@ -625,7 +634,8 @@ KBRow *find_stream_id(PGconn *conn, const char *base_table, const char *kb, cons
 }
 
 
-KBRow *find_status_node_ids(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+KBRow *find_status_node_ids(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+    PGconn *conn = (PGconn *)connection;
     KBQuery *q = kb_query_new(base_table);
     if (!q) {
         *num_results = 0;
@@ -682,7 +692,8 @@ KBRow *find_status_node_ids(PGconn *conn, const char *base_table, const char *kb
     return copy;
 }
 
-KBRow *find_status_node_id(PGconn *conn, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+KBRow *find_status_node_id(void *connection, const char *base_table, const char *kb, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+    PGconn *conn = (PGconn *)connection;
     int num;
     KBRow *rows = find_status_node_ids(conn, base_table, kb, node_name, prop_keys, prop_values, num_props, node_path, &num);
     if (!rows) {
@@ -716,7 +727,8 @@ KBRow *find_status_node_id(PGconn *conn, const char *base_table, const char *kb,
 }
 
 
-KBRow *find_node_ids(PGconn *conn, const char *base_table, const char *kb, const char *label, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+KBRow *find_node_ids(void *connection, const char *base_table, const char *kb, const char *label, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path, int *num_results) {
+    PGconn *conn = (PGconn *)connection;
     KBQuery *q = kb_query_new(base_table);
     if (!q) {
         *num_results = 0;
@@ -774,7 +786,8 @@ KBRow *find_node_ids(PGconn *conn, const char *base_table, const char *kb, const
     return copy;
 }
 
-KBRow *find_node_id(PGconn *conn, const char *base_table, const char *kb,const char *label, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+KBRow *find_node_id(void *connection, const char *base_table, const char *kb,const char *label, const char *node_name, const char **prop_keys, const char **prop_values, int num_props, const char *node_path) {
+    PGconn *conn = (PGconn *)connection;
     int num;
     KBRow *rows = find_node_ids(conn, base_table, kb, label, node_name, prop_keys, prop_values, num_props, node_path, &num);
     if (!rows) {
@@ -838,8 +851,9 @@ PGconn *create_pg_connection(const char *dbname, const char *user, const char *p
 char error_msg[512];
 
 
-void individual_status_table(PGconn *conn, const char *base_table, const char *kb, const char *node_name, 
+void individual_status_table(void *connection, const char *base_table, const char *kb, const char *node_name, 
        const char **prop_keys, const char **prop_values, int num_props, const char *node_path){
+    PGconn *conn = (PGconn *)connection;
     KBQuery *q = kb_query_new(base_table);
     if (!q) {
         fprintf(stderr, "Failed to create KBQuery\n");
@@ -871,7 +885,8 @@ void individual_status_table(PGconn *conn, const char *base_table, const char *k
     kb_query_free(q);
 }
 
-void find_status_tables(PGconn *conn, const char *base_table){
+void find_status_tables(void *connection, const char *base_table){
+    PGconn *conn = (PGconn *)connection;
   
     printf("-------------------------------- find_status_tables\n");
     printf("-------------------------------- wide open test find all status tables\n");
@@ -887,7 +902,8 @@ void find_status_tables(PGconn *conn, const char *base_table){
 
 }
 
-void find_stream_tables(PGconn *conn, const char *base_table){
+void find_stream_tables(void *connection, const char *base_table){
+    PGconn *conn = (PGconn *)connection;
     printf("-------------------------------- find_stream_tables\n");
     printf("-------------------------------- wide open test find all stream tables\n");
     KBQuery *q = kb_query_new(base_table);
@@ -920,7 +936,8 @@ void find_stream_tables(PGconn *conn, const char *base_table){
     
     kb_query_free(q);
 }
-void find_job_tables(PGconn *conn, const char *base_table){
+void find_job_tables(void *connection, const char *base_table){
+    PGconn *conn = (PGconn *)connection;
     printf("-------------------------------- find_job_tables\n");
     printf("-------------------------------- wide open test find all job tables\n");
     KBQuery *q = kb_query_new(base_table);
@@ -953,7 +970,8 @@ void find_job_tables(PGconn *conn, const char *base_table){
     
     kb_query_free(q);
 }
-void find_rpc_server_tables(PGconn *conn, const char *base_table){
+void find_rpc_server_tables(void *connection, const char *base_table){
+    PGconn *conn = (PGconn *)connection;
     printf("-------------------------------- find_rpc_server_tables\n");
     printf("-------------------------------- wide open test find all rpc server tables\n");
     KBQuery *q = kb_query_new(base_table);
@@ -986,7 +1004,8 @@ void find_rpc_server_tables(PGconn *conn, const char *base_table){
     
     kb_query_free(q);
 }
-void find_rpc_client_tables(PGconn *conn, const char *base_table){
+void find_rpc_client_tables(void *connection, const char *base_table){
+    PGconn *conn = (PGconn *)connection;
     printf("-------------------------------- find_rpc_client_tables\n");
     printf("-------------------------------- wide open test find all rpc client tables\n");
     KBQuery *q = kb_query_new(base_table);
@@ -1020,7 +1039,8 @@ void find_rpc_client_tables(PGconn *conn, const char *base_table){
     kb_query_free(q);
 }
 
-void find_node_tables(PGconn *conn, const char *base_table){
+void find_node_tables(void *connection, const char *base_table){
+    PGconn *conn = (PGconn *)connection;
     printf("-------------------------------- find_node_tables\n");
     printf("-------------------------------- search for status nodes using label\n");
     KBQuery *q = kb_query_new(base_table);

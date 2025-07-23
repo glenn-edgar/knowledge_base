@@ -10,7 +10,8 @@
 
 
 // Function to retrieve status data for a given path
-int get_status_data(StatusDataContext *self, const char *path, char **data_str) {
+int get_status_data(void *connection, const char *base_table, const char *path, char **data_str) {
+    PGconn *conn = (PGconn *)connection;
     if (!path || strlen(path) == 0) {
         fprintf(stderr, "Path cannot be empty or NULL\n");
         return -1;
@@ -18,7 +19,7 @@ int get_status_data(StatusDataContext *self, const char *path, char **data_str) 
 
     // Prepare parameterized query
     char query[512];
-    snprintf(query, sizeof(query), "SELECT data FROM %s WHERE path = $1 LIMIT 1", self->base_table);
+    snprintf(query, sizeof(query), "SELECT data FROM %s WHERE path = $1 LIMIT 1", base_table);
 
     // Set up parameters
     const char *param_values[1] = {path};
@@ -26,7 +27,7 @@ int get_status_data(StatusDataContext *self, const char *path, char **data_str) 
     int param_formats[1] = {0}; // Text format
 
     // Execute query
-    PGresult *res = PQexecParams(self->kb_search, query, 1, NULL, param_values, param_lengths, param_formats, 0);
+    PGresult *res = PQexecParams(conn, query, 1, NULL, param_values, param_lengths, param_formats, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
         fprintf(stderr, "Error executing query: %s\n", PQresultErrorMessage(res));
         PQclear(res);
@@ -56,7 +57,8 @@ int get_status_data(StatusDataContext *self, const char *path, char **data_str) 
     return 0;
 }
 
-int set_status_data(StatusDataContext *self, const char *path, const char *data, int retry_count, double retry_delay, int *success, char *message) {
+int set_status_data(void *connection, const char *base_table, const char *path, const char *data, int retry_count, double retry_delay, int *success, char *message) {
+    PGconn *conn = (PGconn *)connection;
     if (!path || strlen(path) == 0) {
         fprintf(stderr, "Path cannot be empty or NULL\n");
         return -1;
@@ -81,7 +83,7 @@ int set_status_data(StatusDataContext *self, const char *path, const char *data,
         "VALUES ($1, $2) "
         "ON CONFLICT (path) "
         "DO UPDATE SET data = EXCLUDED.data "
-        "RETURNING path, (xmax = 0) AS was_inserted", self->base_table);
+        "RETURNING path, (xmax = 0) AS was_inserted", base_table);
 
     // Set up parameters
     const char *param_values[2] = {path, data};
@@ -94,7 +96,7 @@ int set_status_data(StatusDataContext *self, const char *path, const char *data,
 
     while (attempt <= retry_count) {
         // Start transaction
-        PGresult *begin_res = PQexec(self->kb_search, "BEGIN");
+        PGresult *begin_res = PQexec(conn, "BEGIN");
         if (PQresultStatus(begin_res) != PGRES_COMMAND_OK) {
             fprintf(stderr, "Error starting transaction: %s\n", PQresultErrorMessage(begin_res));
             PQclear(begin_res);
@@ -104,7 +106,7 @@ int set_status_data(StatusDataContext *self, const char *path, const char *data,
         PQclear(begin_res);
 
         // Execute query
-        PGresult *res = PQexecParams(self->kb_search, query, 2, NULL, param_values, param_lengths, param_formats, 0);
+        PGresult *res = PQexecParams(conn, query, 2, NULL, param_values, param_lengths, param_formats, 0);
         ExecStatusType status = PQresultStatus(res);
 
         if (status == PGRES_TUPLES_OK) {
@@ -114,7 +116,7 @@ int set_status_data(StatusDataContext *self, const char *path, const char *data,
                 const char *operation = was_inserted ? "inserted" : "updated";
 
                 // Commit transaction
-                PGresult *commit_res = PQexec(self->kb_search, "COMMIT");
+                PGresult *commit_res = PQexec(conn, "COMMIT");
                 if (PQresultStatus(commit_res) != PGRES_COMMAND_OK) {
                     fprintf(stderr, "Error committing transaction: %s\n", PQresultErrorMessage(commit_res));
                     PQclear(commit_res);
@@ -134,7 +136,7 @@ int set_status_data(StatusDataContext *self, const char *path, const char *data,
                 break;
             } else {
                 // Rollback transaction
-                PGresult *rollback_res = PQexec(self->kb_search, "ROLLBACK");
+                PGresult *rollback_res = PQexec(conn, "ROLLBACK");
                 PQclear(rollback_res);
                 fprintf(stderr, "Database operation completed but no result was returned\n");
                 PQclear(res);
@@ -147,7 +149,7 @@ int set_status_data(StatusDataContext *self, const char *path, const char *data,
             PQclear(res);
 
             // Rollback transaction
-            PGresult *rollback_res = PQexec(self->kb_search, "ROLLBACK");
+            PGresult *rollback_res = PQexec(conn, "ROLLBACK");
             PQclear(rollback_res);
 
             if (attempt < retry_count) {
@@ -198,7 +200,7 @@ PGconn *create_pg_connection(const char *dbname, const char *user, const char *p
 
 int main(void){
     char password[256];
-    StatusDataContext context;
+    
     printf("Enter password: "); 
     fgets(password, sizeof(password), stdin); 
     password[strcspn(password, "\n")] = '\0';
@@ -207,28 +209,28 @@ int main(void){
         fprintf(stderr, "Failed to create PostgreSQL connection\n");
         return 1;
     }
-    context.kb_search = conn;
-    context.base_table = "knowledge_base_status";
+    void *conn_ptr = (void *)conn;
+    const char *base_table = "knowledge_base_status";
 
     char *data_str;
-    get_status_data(&context, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", &data_str);
+    get_status_data((void *)conn,base_table, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", &data_str);
     printf("Data: %s\n", data_str);
     free(data_str);
 
     char *data_write_1 = "{\"prop1\":\"value1\",\"prop2\":\"value2\",\"prop3\":\"value3\"}";
     int success;
     char message[512];
-    set_status_data(&context, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", data_write_1, 3, 1.0, &success, message);
+    set_status_data((void *)conn,base_table, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", data_write_1, 3, 1.0, &success, message);
     printf("Success: %d\n", success);
     printf("Message: %s\n", message);
-    get_status_data(&context, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", &data_str);
+    get_status_data((void *)conn,base_table, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", &data_str);
     printf("Data: %s\n", data_str);
     free(data_str);
     char *data_write_2 = "{\"prop1\":\"value1\",\"prop2\":\"value2\"}";
-    set_status_data(&context, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", data_write_2, 3, 1.0, &success, message);
+    set_status_data((void *)conn,base_table, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", data_write_2, 3, 1.0, &success, message);
     printf("Success: %d\n", success);
     printf("Message: %s\n", message);
-    get_status_data(&context, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", &data_str);
+    get_status_data((void *)conn,base_table, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", &data_str);
     printf("Data: %s\n", data_str);
     free(data_str);
    

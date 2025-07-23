@@ -86,7 +86,8 @@ static char *generate_uuid() {
     return str;
 }
 
-int count_jobs_job_types(PGconn *conn, const char *base_table, const char *server_path, const char *state) {
+int count_jobs_job_types(void *connection, const char *base_table, const char *server_path, const char *state) {
+    PGconn *conn = (PGconn *)connection;
     if (!is_valid_ltree_path(server_path)) {
         fprintf(stderr, "Invalid ltree path: %s\n", server_path);
         return -2;
@@ -145,21 +146,25 @@ int count_jobs_job_types(PGconn *conn, const char *base_table, const char *serve
     return (int)count;
 }
 
-int count_processing_jobs(PGconn *conn, const char *base_table, const char *server_path) {
+int count_processing_jobs(void *connection, const char *base_table, const char *server_path) {
+    PGconn *conn = (PGconn *)connection;
     return count_jobs_job_types(conn, base_table, server_path, "processing");
 }
 
-int count_new_jobs(PGconn *conn, const char *base_table, const char *server_path) {
+int count_new_jobs(void *connection, const char *base_table, const char *server_path) {
+    PGconn *conn = (PGconn *)connection;
     return count_jobs_job_types(conn, base_table, server_path, "new_job");
 }
 
-int count_empty_jobs(PGconn *conn, const char *base_table, const char *server_path) {
+int count_empty_jobs(void *connection, const char *base_table, const char *server_path) {
+    PGconn *conn = (PGconn *)connection;
     return count_jobs_job_types(conn, base_table, server_path, "empty");
 }
 
-ServerRow *push_rpc_server_queue(PGconn *conn, const char *base_table, const char *server_path,
+ServerRow *push_rpc_server_queue(void *connection, const char *base_table, const char *server_path,
                           const char *request_id, const char *rpc_action, const char *request_payload_json, const char *transaction_tag,
                           int priority, const char *rpc_client_queue, int max_retries, float wait_time) {
+    PGconn *conn = (PGconn *)connection;
     if (!is_valid_ltree_path(server_path)) {
         fprintf(stderr, "Invalid server_path\n");
         return NULL;
@@ -423,7 +428,8 @@ ServerRow *push_rpc_server_queue(PGconn *conn, const char *base_table, const cha
     return NULL;
 }
 
-ServerRow *peak_server_queue(PGconn *conn, const char *base_table, const char *server_path, int retries, float wait_time) {
+ServerRow *peak_server_queue(void *connection, const char *base_table, const char *server_path, int retries, float wait_time) {
+    PGconn *conn = (PGconn *)connection;
     int attempt = 0;
 
     char *esc_table = escape_table_identifier(conn, base_table);
@@ -595,7 +601,8 @@ ServerRow *peak_server_queue(PGconn *conn, const char *base_table, const char *s
     return NULL;
 }
 
-int mark_job_completion(PGconn *conn, const char *base_table, const char *server_path, int id, int retries, float wait_time) {
+int mark_job_completion(void *connection, const char *base_table, const char *server_path, int id, int retries, float wait_time) {
+    PGconn *conn = (PGconn *)connection;
     int attempt = 0;
 
     char *esc_table = escape_table_identifier(conn, base_table);
@@ -711,7 +718,8 @@ int mark_job_completion(PGconn *conn, const char *base_table, const char *server
     return -1;
 }
 
-int clear_server_queue(PGconn *conn, const char *base_table, const char *server_path, int max_retries, float retry_delay) {
+int clear_server_queue(void *connection, const char *base_table, const char *server_path, int max_retries, float retry_delay) {
+    PGconn *conn = (PGconn *)connection;
     int attempt = 0;
 
     char *esc_table = escape_table_identifier(conn, base_table);

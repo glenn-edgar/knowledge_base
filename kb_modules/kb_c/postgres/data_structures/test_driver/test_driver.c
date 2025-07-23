@@ -10,7 +10,7 @@
 char error_msg[512];
 
 
-void individual_status_table(PGconn *conn, const char *base_table, const char *kb, const char *node_name, 
+void individual_status_table(void  *conn, const char *base_table, const char *kb, const char *node_name, 
        const char **prop_keys, const char **prop_values, int num_props, const char *node_path){
     KBQuery *q = kb_query_new(base_table);
     if (!q) {
@@ -43,7 +43,7 @@ void individual_status_table(PGconn *conn, const char *base_table, const char *k
     kb_query_free(q);
 }
 
-void find_status_tables(PGconn *conn, const char *base_table){
+void find_status_tables(void  *conn, const char *base_table){
   
     printf("-------------------------------- find_status_tables\n");
     printf("-------------------------------- wide open test find all status tables\n");
@@ -59,7 +59,7 @@ void find_status_tables(PGconn *conn, const char *base_table){
 
 }
 
-void find_stream_tables(PGconn *conn, const char *base_table){
+void find_stream_tables(void  *conn, const char *base_table){
     printf("-------------------------------- find_stream_tables\n");
     printf("-------------------------------- wide open test find all stream tables\n");
     KBQuery *q = kb_query_new(base_table);
@@ -92,7 +92,7 @@ void find_stream_tables(PGconn *conn, const char *base_table){
     
     kb_query_free(q);
 }
-void find_job_tables(PGconn *conn, const char *base_table){
+void find_job_tables(void  *conn, const char *base_table){
     printf("-------------------------------- find_job_tables\n");
     printf("-------------------------------- wide open test find all job tables\n");
     KBQuery *q = kb_query_new(base_table);
@@ -125,7 +125,7 @@ void find_job_tables(PGconn *conn, const char *base_table){
     
     kb_query_free(q);
 }
-void find_rpc_server_tables(PGconn *conn, const char *base_table){
+void find_rpc_server_tables(void  *conn, const char *base_table){
     printf("-------------------------------- find_rpc_server_tables\n");
     printf("-------------------------------- wide open test find all rpc server tables\n");
     KBQuery *q = kb_query_new(base_table);
@@ -158,7 +158,7 @@ void find_rpc_server_tables(PGconn *conn, const char *base_table){
     
     kb_query_free(q);
 }
-void find_rpc_client_tables(PGconn *conn, const char *base_table){
+void find_rpc_client_tables(void  *conn, const char *base_table){
     printf("-------------------------------- find_rpc_client_tables\n");
     printf("-------------------------------- wide open test find all rpc client tables\n");
     KBQuery *q = kb_query_new(base_table);
@@ -192,9 +192,9 @@ void find_rpc_client_tables(PGconn *conn, const char *base_table){
     kb_query_free(q);
 }
 
-void test_job_table(PGconn *conn, const char *base_table, const char *queue_path){
+void test_job_table(void  *conn, const char *base_table, const char *queue_path){
 
-    JobQueueContext context;
+    
     printf("-------------------------------- test_job_table\n");
     printf("-------------------------------- \n");
     KBQuery *q = kb_query_new(base_table);
@@ -204,21 +204,19 @@ void test_job_table(PGconn *conn, const char *base_table, const char *queue_path
 
     }
    
-    context.kb_search = conn;
-    context.base_table = base_table;
     
-    clear_job_queue(&context, queue_path, NULL);
+    clear_job_queue(conn, base_table, queue_path, NULL);
         
     int queued_number = 0;
-    int success = get_queued_number(&context, queue_path, &queued_number, NULL);
+    int success = get_queued_number(conn, base_table, queue_path, &queued_number, NULL);
 
     printf("queued_number: %d %d\n", queued_number, success);
     
     int free_number = 0;
-    success = get_free_number(&context, queue_path, &free_number, NULL);
+    success = get_free_number(conn, base_table, queue_path, &free_number, NULL);
     printf("free_number: %d %d\n", free_number, success);
     JobInfo job_info;
-    success = peak_job_data(&context, queue_path, 3, 1.0, &job_info, NULL);
+    success = peak_job_data(conn, base_table, queue_path, 3, 1.0, &job_info, NULL);
     if(success != 0){
         printf("peak_job_data failed\n");
         return;
@@ -235,14 +233,14 @@ void test_job_table(PGconn *conn, const char *base_table, const char *queue_path
 
     const char *push_data = "{\"prop1\": \"val1\", \"prop2\": \"val2\"}";
     printf("push_data: %s\n", push_data);
-    success = push_job_data(&context, queue_path, push_data, 3, 1.0, NULL);
+    success = push_job_data(conn, base_table, queue_path, push_data, 3, 1.0, NULL);
     printf("success: %d\n", success);
-    success = get_queued_number(&context, queue_path, &queued_number, NULL);
+    success = get_queued_number(conn, base_table, queue_path, &queued_number, NULL);
     printf("queued_number: %d %d\n", queued_number, success);
     
-    success = get_free_number(&context, queue_path, &free_number, NULL);
+    success = get_free_number(conn, base_table, queue_path, &free_number, NULL);
     printf("free_number: %d %d\n", free_number, success);
-    success = peak_job_data(&context, queue_path, 3, 1.0, &job_info, NULL);
+    success = peak_job_data(conn, base_table, queue_path, 3, 1.0, &job_info, NULL);
     printf("success: %d\n", success);
     printf("job_info.found: %d\n", job_info.found);
     printf("job_info.id: %d\n", job_info.id);
@@ -251,25 +249,25 @@ void test_job_table(PGconn *conn, const char *base_table, const char *queue_path
         free(job_info.data);
     }
     
-    success = get_free_number(&context, queue_path, &free_number, NULL);
+    success = get_free_number(conn, base_table, queue_path, &free_number, NULL);
     printf("free_number: %d %d\n", free_number, success);
-    success = peak_job_data(&context, queue_path, 3, 1.0, &job_info, NULL);
+    success = peak_job_data(conn, base_table, queue_path, 3, 1.0, &job_info, NULL);
     printf("success: %d\n", success);
-    success = get_free_number(&context, queue_path, &free_number, NULL);
+    success = get_free_number(conn, base_table, queue_path, &free_number, NULL);
     printf("free_number: %d %d\n", free_number, success);
     
     
-    success = mark_job_completed(&context, job_info.id, 3, 1.0, NULL);
+    success = mark_job_completed(conn, base_table, job_info.id, 3, 1.0, NULL);
     printf("success: %d\n", success);
-    success = get_free_number(&context, queue_path, &free_number, NULL);
+    success = get_free_number(conn, base_table, queue_path, &free_number, NULL);
     printf("free_number: %d %d\n", free_number, success);
     
     
     kb_query_free(q);
 }
 
-void test_status_table(PGconn *conn, const char *base_table, const char *status_path){
-    StatusDataContext context;
+void test_status_table(void  *conn, const char *base_table, const char *status_path){
+    
     printf("-------------------------------- test_status_table\n");
     printf("-------------------------------- \n");
     KBQuery *q = kb_query_new(base_table);
@@ -279,34 +277,32 @@ void test_status_table(PGconn *conn, const char *base_table, const char *status_
     }
 
 
-    context.kb_search = conn;
-    context.base_table = base_table;
 
     char *data_str;
-    get_status_data(&context, status_path, &data_str);
+    get_status_data(conn, base_table, status_path, &data_str);
     printf("Data: %s\n", data_str);
     free(data_str);
 
     char *data_write_1 = "{\"prop1\":\"value1\",\"prop2\":\"value2\",\"prop3\":\"value3\"}";
     int success;
     char message[512];
-    set_status_data(&context, status_path, data_write_1, 3, 1.0, &success, message);
+    set_status_data(conn, base_table, status_path, data_write_1, 3, 1.0, &success, message);
     printf("Success: %d\n", success);
     printf("Message: %s\n", message);
-    get_status_data(&context, status_path, &data_str);
+    get_status_data(conn, base_table, status_path, &data_str);
     printf("Data: %s\n", data_str);
     free(data_str);
     char *data_write_2 = "{\"prop1\":\"value1\",\"prop2\":\"value2\"}";
-    set_status_data(&context, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", data_write_2, 3, 1.0, &success, message);
+    set_status_data(conn, base_table, "kb1.header1_link.header1_name.KB_STATUS_FIELD.info2_status", data_write_2, 3, 1.0, &success, message);
     printf("Success: %d\n", success);
     printf("Message: %s\n", message);
-    get_status_data(&context, status_path, &data_str);
+    get_status_data(conn, base_table, status_path, &data_str);
     printf("Data: %s\n", data_str);
     free(data_str);
     
 }
 
-void test_stream_table(PGconn *conn, const char *base_table, const char *stream_path){
+void test_stream_table(void  *conn, const char *base_table, const char *stream_path){
     printf("-------------------------------- test_stream_table\n");
     printf("-------------------------------- push stream data\n");
     KBQuery *q = kb_query_new(base_table);
@@ -342,7 +338,7 @@ char* generate_request_uuid() {
 
 
 
-void test_rpc_client_table(PGconn *conn, const char *base_table ){
+void test_rpc_client_table(void  *conn, const char *base_table ){
     printf("-------------------------------- test_rpc_client_table\n");
     printf("-------------------------------- \n");
     KBQuery *q = kb_query_new(base_table);
@@ -418,7 +414,7 @@ void print_row_data(ServerRow *row){
     }
 }
 
-void test_rpc_server_table(PGconn *conn, const char *base_table ){
+void test_rpc_server_table(void  *conn, const char *base_table ){
     printf("-------------------------------- test_rpc_server_table\n");
     printf("-------------------------------- \n");
     KBQuery *q = kb_query_new(base_table);
@@ -501,7 +497,7 @@ int main(void){
     printf("Enter password: "); 
     fgets(password, sizeof(password), stdin); 
 
-    PGconn *conn = create_pg_connection("knowledge_base", "gedgar", password, "localhost", "5432");
+    void  *conn = create_pg_connection("knowledge_base", "gedgar", password, "localhost", "5432");
     if (!conn) {
         fprintf(stderr, "Failed to create PostgreSQL connection\n");
         return 1;

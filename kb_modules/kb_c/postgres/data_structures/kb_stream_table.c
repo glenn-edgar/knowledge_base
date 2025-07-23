@@ -35,7 +35,8 @@ void print_error(char **error_msg,char *message){
  *     int: 0 on success, -1 on failure.
  *     If -1, check *error_msg for details.
  */
-int push_stream_data(PGconn *conn, const char *base_table, const char *path, const char *data, int max_retries, double retry_delay, char **error_msg) {
+int push_stream_data(void *connection, const char *base_table, const char *path, const char *data, int max_retries, double retry_delay, char **error_msg) {
+    PGconn *conn = (PGconn *)connection;
     print_error(error_msg, NULL);
 
     if (!path || strlen(path) == 0) {
@@ -195,7 +196,7 @@ int main(void){
         fprintf(stderr, "Failed to create PostgreSQL connection\n");
         return 1;
     }
-    int success = push_stream_data(conn, "knowledge_base_stream", "kb1.header1_link.header1_name.KB_STREAM_FIELD.info1_stream", 
+    int success = push_stream_data((void *)conn, "knowledge_base_stream", "kb1.header1_link.header1_name.KB_STREAM_FIELD.info1_stream", 
         "{\"prop1\":\"value1\",\"prop2\":\"value2\",\"prop3\":\"value3\"}", 3, 1.0, NULL);
     printf("success: %d\n", success);
     if (success != 0){

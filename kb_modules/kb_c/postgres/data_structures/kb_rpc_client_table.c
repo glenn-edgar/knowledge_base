@@ -11,7 +11,8 @@
 
 /* Note: Caller is responsible for freeing the strings in RPCRow using free() */
 
-int find_free_slots(PGconn *conn, const char *base_table, const char *client_path) {
+int find_free_slots(void *connection, const char *base_table, const char *client_path) {
+    PGconn *conn = (PGconn *)connection;
     char query[1024];
     char *esc_table = PQescapeIdentifier(conn, base_table, strlen(base_table));
     if (!esc_table) {
@@ -50,7 +51,8 @@ int find_free_slots(PGconn *conn, const char *base_table, const char *client_pat
     return (int)free_slots;
 }
 
-int find_queued_slots(PGconn *conn, const char *base_table, const char *client_path) {
+int find_queued_slots(void *connection, const char *base_table, const char *client_path) {
+    PGconn *conn = (PGconn *)connection;
     char query[1024];
     char *esc_table = PQescapeIdentifier(conn, base_table, strlen(base_table));
     if (!esc_table) {
@@ -89,8 +91,9 @@ int find_queued_slots(PGconn *conn, const char *base_table, const char *client_p
     return (int)queued_slots;
 }
 
-RPCRow *peak_and_claim_reply_data(PGconn *conn, const char *base_table, const char *client_path,
+RPCRow *peak_and_claim_reply_data(void *connection, const char *base_table, const char *client_path,
                                   int max_retries, float retry_delay) {
+    PGconn *conn = (PGconn *)connection;
     int attempt = 0;
     char update_query[2048];
     char check_query[1024];
@@ -193,8 +196,9 @@ RPCRow *peak_and_claim_reply_data(PGconn *conn, const char *base_table, const ch
     return NULL;
 }
 
-int clear_reply_queue(PGconn *conn, const char *base_table, const char *client_path,
+int clear_reply_queue(void *connection, const char *base_table, const char *client_path,
                       int max_retries, float retry_delay) {
+    PGconn *conn = (PGconn *)connection;
     int attempt = 0;
     char select_query[1024];
     char update_query[2048];
@@ -287,148 +291,153 @@ int clear_reply_queue(PGconn *conn, const char *base_table, const char *client_p
     return -1;
 }
 
-int push_and_claim_reply_data(PGconn *conn, const char *base_table, const char *client_path,
+int push_and_claim_reply_data(void *connection, const char *base_table, const char *client_path,
     const char *request_uuid, const char *server_path,
     const char *rpc_action, const char *transaction_tag,
     const char *reply_payload,
     int max_retries, float retry_delay) {
+    PGconn *conn = (PGconn *)connection;
     int attempt = 0;
     char query[4096];
     char *esc_table = PQescapeIdentifier(conn, base_table, strlen(base_table));
     if (!esc_table) {
-    fprintf(stderr, "Failed to escape table identifier\n");
-    return -1;
+        fprintf(stderr, "Failed to escape table identifier\n");
+        return -1;
     }
 
     // Handle NULL request_uuid case
     if (request_uuid == NULL) {
-    snprintf(query, sizeof(query),
-    "WITH candidate AS ("
-    "    SELECT id "
-    "    FROM %s "
-    "    WHERE client_path = $1 "
-    "    AND is_new_result = FALSE "
-    "    ORDER BY response_timestamp ASC "
-    "    FOR UPDATE SKIP LOCKED "
-    "    LIMIT 1"
-    ") "
-    "UPDATE %s "
-    "SET "
-    "    request_id = gen_random_uuid(), "
-    "    server_path = $2, "
-    "    rpc_action = $3, "
-    "    transaction_tag = $4, "
-    "    response_payload = $5, "
-    "    is_new_result = TRUE, "
-    "    response_timestamp = CURRENT_TIMESTAMP "
-    "FROM candidate "
-    "WHERE %s.id = candidate.id "
-    "RETURNING %s.id", esc_table, esc_table, esc_table, esc_table);
+        snprintf(query, sizeof(query),
+            "WITH candidate AS ("
+            "    SELECT id "
+            "    FROM %s "
+            "    WHERE client_path = $1 "
+            "    AND is_new_result = FALSE "
+            "    ORDER BY response_timestamp ASC "
+            "    FOR UPDATE SKIP LOCKED "
+            "    LIMIT 1"
+            ") "
+            "UPDATE %s "
+            "SET "
+            "    request_id = gen_random_uuid(), "
+            "    server_path = $2, "
+            "    rpc_action = $3, "
+            "    transaction_tag = $4, "
+            "    response_payload = $5, "
+            "    is_new_result = TRUE, "
+            "    response_timestamp = CURRENT_TIMESTAMP "
+            "FROM candidate "
+            "WHERE %s.id = candidate.id "
+            "RETURNING %s.id", esc_table, esc_table, esc_table, esc_table);
     } else {
-    snprintf(query, sizeof(query),
-    "WITH candidate AS ("
-    "    SELECT id "
-    "    FROM %s "
-    "    WHERE client_path = $1 "
-    "    AND is_new_result = FALSE "
-    "    ORDER BY response_timestamp ASC "
-    "    FOR UPDATE SKIP LOCKED "
-    "    LIMIT 1"
-    ") "
-    "UPDATE %s "
-    "SET "
-    "    request_id = $2, "
-    "    server_path = $3, "
-    "    rpc_action = $4, "
-    "    transaction_tag = $5, "
-    "    response_payload = $6, "
-    "    is_new_result = TRUE, "
-    "    response_timestamp = CURRENT_TIMESTAMP "
-    "FROM candidate "
-    "WHERE %s.id = candidate.id "
-    "RETURNING %s.id", esc_table, esc_table, esc_table, esc_table);
+        snprintf(query, sizeof(query),
+            "WITH candidate AS ("
+            "    SELECT id "
+            "    FROM %s "
+            "    WHERE client_path = $1 "
+            "    AND is_new_result = FALSE "
+            "    ORDER BY response_timestamp ASC "
+            "    FOR UPDATE SKIP LOCKED "
+            "    LIMIT 1"
+            ") "
+            "UPDATE %s "
+            "SET "
+            "    request_id = $2, "
+            "    server_path = $3, "
+            "    rpc_action = $4, "
+            "    transaction_tag = $5, "
+            "    response_payload = $6, "
+            "    is_new_result = TRUE, "
+            "    response_timestamp = CURRENT_TIMESTAMP "
+            "FROM candidate "
+            "WHERE %s.id = candidate.id "
+            "RETURNING %s.id", esc_table, esc_table, esc_table, esc_table);
     }
 
     PQfreemem(esc_table);
 
     char *last_error = NULL;
     while (attempt <= max_retries) {
-    PGresult *res = PQexec(conn, "BEGIN");
-    if (PQresultStatus(res) != PGRES_COMMAND_OK) {
-    free(last_error);
-    last_error = strdup(PQerrorMessage(conn));
-    fprintf(stderr, "BEGIN failed: %s\n", last_error);
-    PQclear(res);
-    attempt++;
-    if (attempt > max_retries) {
+        PGresult *res = PQexec(conn, "BEGIN");
+        if (PQresultStatus(res) != PGRES_COMMAND_OK) {
+            free(last_error);
+            last_error = strdup(PQerrorMessage(conn));
+            fprintf(stderr, "BEGIN failed: %s\n", last_error);
+            PQclear(res);
+            attempt++;
+            if (attempt > max_retries) {
+                free(last_error);
+                return -1;
+            }
+            usleep((useconds_t)(retry_delay * 1000000));
+            continue;
+        }
+        PQclear(res);
+
+        // Prepare parameters based on whether request_uuid is NULL
+        if (request_uuid == NULL) {
+            const char *params[5] = {client_path, server_path, rpc_action, transaction_tag, reply_payload};
+            res = PQexecParams(conn, query, 5, NULL, params, NULL, NULL, 0);
+        } else {
+            const char *params[6] = {client_path, request_uuid, server_path, rpc_action, transaction_tag, reply_payload};
+            res = PQexecParams(conn, query, 6, NULL, params, NULL, NULL, 0);
+        }
+
+        if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+            free(last_error);
+            last_error = strdup(PQerrorMessage(conn));
+            PQclear(res);
+            PQexec(conn, "ROLLBACK");
+            attempt++;
+            if (attempt > max_retries) {
+                fprintf(stderr, "Failed after %d retries: %s\n", max_retries, last_error);
+                free(last_error);
+                return -1;
+            }
+            usleep((useconds_t)(retry_delay * 1000000));
+            continue;
+        }
+
+        if (PQntuples(res) == 0) {
+            PQclear(res);
+            PQexec(conn, "ROLLBACK");
+            fprintf(stderr, "No available record with is_new_result=FALSE found\n");
+            free(last_error);
+            return -2;
+        }
+
+        PQclear(res);
+        PQexec(conn, "COMMIT");
+        free(last_error);
+        return 0;
+    }
+
     free(last_error);
     return -1;
 }
-usleep((useconds_t)(retry_delay * 1000000));
-continue;
-}
-PQclear(res);
 
-// Prepare parameters based on whether request_uuid is NULL
-if (request_uuid == NULL) {
-const char *params[5] = {client_path, server_path, rpc_action, transaction_tag, reply_payload};
-res = PQexecParams(conn, query, 5, NULL, params, NULL, NULL, 0);
-} else {
-const char *params[6] = {client_path, request_uuid, server_path, rpc_action, transaction_tag, reply_payload};
-res = PQexecParams(conn, query, 6, NULL, params, NULL, NULL, 0);
-}
 
-if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-free(last_error);
-last_error = strdup(PQerrorMessage(conn));
-PQclear(res);
-PQexec(conn, "ROLLBACK");
-attempt++;
-if (attempt > max_retries) {
-fprintf(stderr, "Failed after %d retries: %s\n", max_retries, last_error);
-free(last_error);
-return -1;
-}
-usleep((useconds_t)(retry_delay * 1000000));
-continue;
-}
-
-if (PQntuples(res) == 0) {
-PQclear(res);
-PQexec(conn, "ROLLBACK");
-fprintf(stderr, "No available record with is_new_result=FALSE found\n");
-free(last_error);
-return -2;
-}
-
-PQclear(res);
-PQexec(conn, "COMMIT");
-free(last_error);
-return 0;
-}
-
-free(last_error);
-return -1;
-}
-void free_rpc_row(RPCRow *row){
-    if (row){
-       
-        if (row->client_path){
+void free_rpc_row(RPCRow *row) {
+    if (row) {
+        if (row->request_id) {
+            free(row->request_id);
+        }
+        if (row->client_path) {
             free(row->client_path);
         }
-        if (row->server_path){
+        if (row->server_path) {
             free(row->server_path);
         }
-        if (row->transaction_tag){
+        if (row->transaction_tag) {
             free(row->transaction_tag);
         }
-        if (row->rpc_action){
+        if (row->rpc_action) {
             free(row->rpc_action);
         }
-        if (row->response_payload){ 
+        if (row->response_payload) { 
             free(row->response_payload);
         }
-        if (row->response_timestamp){
+        if (row->response_timestamp) {
             free(row->response_timestamp);
         }
         free(row);
@@ -458,7 +467,6 @@ PGconn *create_pg_connection(const char *dbname, const char *user, const char *p
     }
 
     return conn;
-
 }
 
 
@@ -477,7 +485,7 @@ char* generate_request_uuid() {
     return uuid_str;
 }
 
-int main(void){
+int main(void) {
     RPCRow *row = NULL;
     char password[256];
     char *base_table = "knowledge_base_rpc_client";
@@ -487,7 +495,6 @@ int main(void){
     char *rpc_action = "response_reply";
     char *transaction_tag = "1234567890";
     char *reply_payload = "{\"prop1\":\"value1\",\"prop2\":\"value2\",\"prop3\":\"value3\"}";
-
 
     printf("Enter password: "); 
     fgets(password, sizeof(password), stdin); 
@@ -503,7 +510,7 @@ int main(void){
     int queued_slots = find_queued_slots(conn, base_table, client_path);
     printf("queued_slots: %d\n", queued_slots);
     
-    int updated_records  = clear_reply_queue(conn, base_table, client_path, 3, 1.0);
+    int updated_records = clear_reply_queue(conn, base_table, client_path, 3, 1.0);
     printf("updated_records: %d\n", updated_records);
     
     int success = push_and_claim_reply_data(conn, base_table, client_path, request_uuid, server_path, rpc_action, transaction_tag, reply_payload, 3, 1.0);
@@ -530,8 +537,7 @@ int main(void){
     queued_slots = find_queued_slots(conn, base_table, client_path);
     printf("queued_slots: %d\n", queued_slots);
 
-
-   return 0;
+    return 0;
 }
 
 #endif

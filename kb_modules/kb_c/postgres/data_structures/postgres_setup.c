@@ -5,7 +5,7 @@
 #ifndef __MAIN__
 
 
-PGconn *create_pg_connection(const char *dbname, const char *user, const char *password, const char *host, const char *port) {
+void *create_pg_connection(const char *dbname, const char *user, const char *password, const char *host, const char *port) {
     // Build connection string
     char conninfo[256];
     snprintf(conninfo, sizeof(conninfo), 
@@ -24,6 +24,6 @@ PGconn *create_pg_connection(const char *dbname, const char *user, const char *p
         return NULL;
     }
 
-    return conn;
+    return (void *)conn;
 }
 #endif
