@@ -1,0 +1,40 @@
+using System;
+using System.Collections.Generic;
+
+public class ClearStreamDataResult
+{
+    public bool Success { get; set; }
+    public int ClearedCount { get; set; }
+    public List<dynamic>? ClearedRecords { get; set; }
+    public string? Error { get; set; }
+}
+
+public class JobCompletionResult
+{
+    public bool Success { get; set; }
+    public int JobId { get; set; }
+    public DateTime CompletedAt { get; set; }
+}
+
+public class JobPushResult
+{
+    public int JobId { get; set; }
+    public DateTime ScheduleAt { get; set; }
+    public object Data { get; set; }
+}
+
+public class JobQueueClearResult
+{
+    public bool Success { get; set; } = true;
+    public int ClearedCount { get; set; }
+    public List<dynamic> ClearedJobs { get; set; } = new List<dynamic>();
+}
+
+public class JobCountResult
+{
+    public int EmptyJobs { get; set; }
+    public int NewJobs { get; set; }
+    public int ProcessingJobs { get; set; }
+}
+
+
