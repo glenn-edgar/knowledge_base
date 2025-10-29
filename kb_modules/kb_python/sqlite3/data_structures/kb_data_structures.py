@@ -2,14 +2,14 @@ from datetime import datetime, timedelta, timezone
 import uuid
 import sqlite3
 import sys
-from kb_query_support import KB_Search
-from kb_status_data import KB_Status_Data
-from kb_job_table import KB_Job_Queue
-from kb_stream import KB_Stream
-from kb_rpc_client import KB_RPC_Client
-from kb_rpc_server import KB_RPC_Server
-from kb_link_table import KB_Link_Table
-from kb_link_mount_table import KB_Link_Mount_Table
+from .kb_query_support import KB_Search
+from .kb_status import KB_Status_Table
+from .kb_job_queue import KB_Job_Queue
+from .kb_stream import KB_Stream
+from .kb_rpc_client import KB_RPC_Client
+from .kb_rpc_server import KB_RPC_Server
+from .kb_link_table import KB_Link_Table
+from .kb_link_mount_table import KB_Link_Mount_Table
 
 class KB_Data_Structures:
     """
@@ -39,12 +39,12 @@ class KB_Data_Structures:
         self.find_path_values = self.query_support.find_path_values
         self.decode_link_nodes = self.query_support.decode_link_nodes
 
-        self.status_data = KB_Status_Data(self.query_support, database)
-        self.find_status_node_ids = self.status_data.find_node_ids
-        self.find_status_node_id = self.status_data.find_node_id
-        self.get_status_data = self.status_data.get_status_data
-        self.set_status_data = self.status_data.set_status_data
-        self.get_status_data = self.status_data.get_status_data
+        self.status_table = KB_Status_Table(self.query_support, database)
+        self.find_status_node_ids = self.status_table.find_node_ids
+        self.find_status_node_id = self.status_table.find_node_id
+        self.get_status_data = self.status_table.get_status_data
+        self.set_status_data = self.status_table.set_status_data
+        self.get_status_data = self.status_table.get_status_data
         
         self.job_queue = KB_Job_Queue(self.query_support, database)
         self.find_job_ids = self.job_queue.find_job_ids
@@ -209,7 +209,7 @@ if __name__ == "__main__":
         print(f"Waiting jobs: {waiting_jobs}")
         # Push first set of reply data
         print("\n=== Pushing First Set of Reply Data ===")
-        request_id1 = uuid.uuid4()
+        request_id1 = str(uuid.uuid4())
         self.rpc_client_push_and_claim_reply_data(
             client_path, 
             request_id1, 

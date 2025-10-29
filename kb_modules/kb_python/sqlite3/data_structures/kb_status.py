@@ -4,7 +4,7 @@ import json
 import time
 
 
-class KB_Status_Data:
+class KB_Status_Table:
     """
     A class to handle the status data for the knowledge base.
     Performance-optimized with proper error handling and dynamic table names.

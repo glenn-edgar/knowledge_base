@@ -10,7 +10,7 @@ class Construct_KB(KnowledgeBaseManager):
     manages a connection to a SQLite database and sets up the schema.
     """
 
-    def __init__(self, db_path, table_name="knowledge_base", ltree_extension_path=None):
+    def __init__(self, db_path, table_name="knowledge_base", ltree_extension_path=None, reset=False):
         """
         Initializes the Construct_KB object and connects to the SQLite database.
         Also sets up the database schema.
@@ -29,7 +29,7 @@ class Construct_KB(KnowledgeBaseManager):
         self.table_name = table_name
         
         # Initialize parent class
-        KnowledgeBaseManager.__init__(self, table_name, db_path, ltree_extension_path)
+        KnowledgeBaseManager.__init__(self, table_name, db_path, ltree_extension_path, reset)
         
         
     def get_db_objects(self):

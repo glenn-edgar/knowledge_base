@@ -1,6 +1,6 @@
 import sqlite3
 import json
-
+import sys
 from .construct_kb import Construct_KB
 from .construct_status import Construct_Status_Table
 from .construct_job import Construct_Job_Table
@@ -15,7 +15,7 @@ class Construct_Data_Tables:
     and info nodes, using a stack-based approach to manage the path. It also
     manages a connection to a SQLite database and sets up the schema.
     """
-    def __init__(self, db_path, database, ltree_extension_path=None):
+    def __init__(self, db_path, database, ltree_extension_path=None, reset=False):
         """
         Initializes the Construct_Data_Tables object by creating instances of all required
         table constructor classes and connecting to the SQLite database.
@@ -27,7 +27,7 @@ class Construct_Data_Tables:
                                        If None, will auto-detect from common locations
         """
         # Create KB as an attribute instead of inheriting from it
-        self.kb = Construct_KB(db_path, database, ltree_extension_path)
+        self.kb = Construct_KB(db_path, database, ltree_extension_path, reset)
         
         # Create instances of all table constructors as attributes
         self.status_table = Construct_Status_Table(self.kb.conn, self.kb.cursor, construct_kb=self.kb, database=database)
@@ -70,8 +70,16 @@ class Construct_Data_Tables:
 
 if __name__ == '__main__':
     # Example Usage with SQLite
-    DB_PATH = "knowledge_base.db"
+    
     DATABASE = "knowledge_base"
+    if len(sys.argv) < 2:
+        print("Usage: python kb_data_structures.py <database_file.db> <unit_test: True/False>")
+        print("Example: python kb_data_structures.py knowledge_base.db True")
+        sys.exit(1)
+    
+    db_file = sys.argv[1]
+    unit_test = "False" if len(sys.argv) < 3 else sys.argv[2]
+    # Create a new KB_Data_Structures instance
     
     # Optional: specify ltree extension path
     # LTREE_EXT = "/usr/local/lib/ltree"  # Will auto-detect if None
@@ -80,7 +88,7 @@ if __name__ == '__main__':
     print("Test 1: Complete functionality test")
     print("="*70)
     
-    kb = Construct_Data_Tables(DB_PATH, DATABASE)
+    kb = Construct_Data_Tables(db_file, DATABASE,reset=True)
 
     print("\nInitial state:")
     print(f"Path: {kb.path}")
@@ -124,12 +132,15 @@ if __name__ == '__main__':
         print("✓ Test 1 completed successfully")
     except RuntimeError as e:
         print(f"✗ Error during installation check: {e}")
-
+   
     print("\n" + "="*70)
     print("Test 2: Modified fields test")
     print("="*70)
     
-    kb = Construct_Data_Tables(DB_PATH, DATABASE)
+    if unit_test != "True":
+        exit()
+    
+    kb = Construct_Data_Tables(db_file, DATABASE, reset=True)
 
     print("\nInitial state:")
     print(f"Path: {kb.path}")
@@ -172,17 +183,19 @@ if __name__ == '__main__':
         print("✓ Test 2 completed successfully")
     except RuntimeError as e:
         print(f"✗ Error during installation check: {e}")
+        
+    
 
     print("\n" + "="*70)
     print("Test 3: Reduced queue sizes test")
     print("="*70)
     
-    kb = Construct_Data_Tables(DB_PATH, DATABASE)
+    kb = Construct_Data_Tables(db_file, DATABASE, reset=True)
 
     print("\nInitial state:")
     print(f"Path: {kb.path}")
     
-    kb.add_kb("kb1", "First knowledge base")
+    kb.add_kb("kb1", "Second knowledge base")
     kb.select_kb("kb1")
     
     kb.add_header_node("header1_link", "header1_name", {"prop1": "val1"}, {"data": "header1_data"})
@@ -208,6 +221,7 @@ if __name__ == '__main__':
     kb.leave_header_node("header2_link", "header2_name")
     print("\nAfter adding and leaving another header node:")
     print(f"Path: {kb.path}")
+    
 
     # Check installation
     try:

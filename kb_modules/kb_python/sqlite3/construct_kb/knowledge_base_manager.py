@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 
 class KnowledgeBaseManager:
-    def __init__(self, table_name: str, db_path: str, ltree_extension_path: str = None):
+    def __init__(self, table_name: str, db_path: str, ltree_extension_path: str = None, reset: bool = False):
         """
         Initialize the KnowledgeBaseManager with SQLite database path.
         
@@ -15,6 +15,7 @@ class KnowledgeBaseManager:
                                  (e.g., './ltree' or '/usr/local/lib/ltree')
                                  SQLite automatically adds .so/.dll/.dylib
                                  If None, will search common locations
+            reset: If True, delete existing tables before creating new ones (default: False)
         """
         self.db_path = db_path
         self.table_name = table_name
@@ -42,7 +43,7 @@ class KnowledgeBaseManager:
         
         self.ltree_extension_path = ltree_extension_path
         self._connect()
-        self._create_tables()
+        self._create_tables(reset=reset)
         
     def _connect(self):
         """Establish database connection and load ltree extension."""
@@ -97,20 +98,26 @@ class KnowledgeBaseManager:
             print(f"Error deleting table {table_name}: {e}")
             raise
             
-    def _create_tables(self):
+    def _create_tables(self, reset: bool = False):
         """
         Create knowledge base tables with the supplied table name.
+        If reset=True, delete existing tables first.
+        
+        Args:
+            reset: If True, delete existing tables before creating (default: False)
         """
         
-        self._delete_table(self.table_name)
-        self._delete_table(f"{self.table_name}_info")
-        self._delete_table(f"{self.table_name}_link")
-        self._delete_table(f"{self.table_name}_link_mount")
+        # Only delete tables if reset is True
+        if reset:
+            self._delete_table(self.table_name)
+            self._delete_table(f"{self.table_name}_info")
+            self._delete_table(f"{self.table_name}_link")
+            self._delete_table(f"{self.table_name}_link_mount")
         
         try:
-            # Create knowledge base table
+            # Create knowledge base table (conditionally)
             kb_table_query = f"""
-                CREATE TABLE {self.table_name} (
+                CREATE TABLE IF NOT EXISTS {self.table_name} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     knowledge_base TEXT NOT NULL,
                     label TEXT NOT NULL,
@@ -123,18 +130,18 @@ class KnowledgeBaseManager:
                 )
             """
             
-            # Create information table
+            # Create information table (conditionally)
             info_table_query = f"""
-                CREATE TABLE {self.table_name}_info (
+                CREATE TABLE IF NOT EXISTS {self.table_name}_info (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     knowledge_base TEXT NOT NULL UNIQUE,
                     description TEXT
                 )
             """
             
-            # Create link table
+            # Create link table (conditionally)
             link_table_query = f"""
-                CREATE TABLE {self.table_name}_link (
+                CREATE TABLE IF NOT EXISTS {self.table_name}_link (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     link_name TEXT NOT NULL,
                     parent_node_kb TEXT NOT NULL,
@@ -144,9 +151,9 @@ class KnowledgeBaseManager:
                 )
             """
             
-            # Create link mount table
+            # Create link mount table (conditionally)
             link_mount_table_query = f"""
-                CREATE TABLE {self.table_name}_link_mount (
+                CREATE TABLE IF NOT EXISTS {self.table_name}_link_mount (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     link_name TEXT NOT NULL UNIQUE,
                     knowledge_base TEXT NOT NULL,
@@ -650,7 +657,11 @@ if __name__ == "__main__":
     # Note: Don't include .so/.dylib - SQLite adds it automatically
     
     # Auto-detect (checks ./ltree, /usr/local/lib/ltree, /usr/lib/ltree)
+    # By default, reset=False so existing data is preserved
     kb_manager = KnowledgeBaseManager('knowledge_base', db_path)
+    
+    # To reset and start fresh, use:
+    # kb_manager = KnowledgeBaseManager('knowledge_base', db_path, reset=True)
     
     print("Starting unit test")
     

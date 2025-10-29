@@ -349,6 +349,8 @@ class KB_RPC_Client:
         """
         attempt = 0
         last_error = None
+        request_uuid = str(request_uuid) if not isinstance(request_uuid, str) else request_uuid
+    
 
         while attempt <= max_retries:
             try:
