@@ -1,12 +1,17 @@
-from basic_contruct_db import BasicConstructDB
+import yaml
 
+from .kb_ltree_search import KB_Ltree_Search
 
-class SearchMemDB(BasicConstructDB):
-    def __init__(self,host,port,dbname,user,password,table_name):
-        BasicConstructDB.__init__(self,host,port,dbname,user,password,table_name)
+class SearchMemDB(KB_Ltree_Search):
+    def __init__(self,yaml_file_name):
+       
+        with open(yaml_file_name, 'r') as file:
+            self.data = yaml.safe_load(file)
+    
+        KB_Ltree_Search.__init__(self,self.data)
+    
+        self._generated_decoded_keys(self.data)
         
-        self.import_from_postgres(self.table_name)
-        self.keys = self._generated_decoded_keys(self.data)
         
         
     def _generated_decoded_keys(self,data):
@@ -28,8 +33,23 @@ class SearchMemDB(BasicConstructDB):
             if name not in self.names:
                 self.names[name] = []
             self.names[name].append(key)
+            self.clear_rw_data(key)
  
         
+    def get_node(self,key):
+        return self.data[key].copy.deepcopy()
+    
+    def store_node(self, key,rw_data):
+        if key not in self.data:
+            raise ValueError(f"Key {key} not found")
+        if 'volatile_data' not in self.data[key]:
+            self.data[key]['volatile_data'] = {}
+        self.data[key]['volatile_data'] = rw_data
+    
+    def clear_rw_data(self,key):
+        for key in self.data.keys():
+            self.data[key]['volatile_data'] = {}
+    
     def clear_filters(self):
         """
         Clear all filters and reset the query state.
@@ -85,7 +105,7 @@ class SearchMemDB(BasicConstructDB):
     def search_property_key(self, data_key):
         new_filter_results = {}
         for key in self.filter_results.keys():
-            value = self.data[key].data
+            value = self.data[key]
             
             if data_key in value:
                 new_filter_results[key] = self.filter_results[key]
@@ -103,7 +123,7 @@ class SearchMemDB(BasicConstructDB):
         """
         new_filter_results = {}
         for key in self.filter_results.keys():
-            value = self.data[key].data
+            value = self.data[key]
             if data_key in value:
                  if data_value == value[data_key]:
                     new_filter_results[key] = self.filter_results[key]
@@ -134,8 +154,8 @@ class SearchMemDB(BasicConstructDB):
             starting_path_list = self.query_descendants(starting_path)
             if starting_path_list:
                 for item in starting_path_list:
-                    if item['path'] in self.filter_results:
-                        new_filter_results[item['path']] = self.filter_results[item['path']]
+                    if item['ltree_name'] in self.filter_results:
+                        new_filter_results[item['ltree_name']] = self.filter_results[item['ltree_name']]
         except Exception as e:
             print(f"Error querying descendants: {e}")
         
@@ -160,8 +180,8 @@ class SearchMemDB(BasicConstructDB):
         
         new_filter_results = {}
         for item in search_results:
-            if item['path'] in self.filter_results:
-                new_filter_results[item['path']] = self.filter_results[item['path']]
+            if item['ltree_name'] in self.filter_results:
+                new_filter_results[item['ltree_name']] = self.filter_results[item['ltree_name']]
         self.filter_results = new_filter_results
         return self.filter_results
     
@@ -185,14 +205,18 @@ class SearchMemDB(BasicConstructDB):
         
         for row_key in self.data.keys():
             row_data = self.data[row_key]
-            data = row_data.data
+            data = row_data['data']
             description = data.get('description', '') 
             return_values[row_key] = description
         return return_values
    
 if __name__ == "__main__":
-    password = input("Enter Postgres Password: ")
-    kb = SearchMemDB(host="localhost", port=5432, dbname="knowledge_base", user="gedgar", password=password, table_name='composite_memory_kb')
+    import sys
+    if len(sys.argv) != 2:
+        print("Usage: python kb_search.py <yaml_file>")
+        sys.exit(1)
+    yaml_file = sys.argv[1]
+    kb = SearchMemDB(yaml_file_name=yaml_file)
     print("decoded_keys keys: ",kb.decoded_keys.keys())
     kb.clear_filters()
     print("----------------------------------")

@@ -1,0 +1,48 @@
+kb1.composite1_link.composite1_name:
+  ltree_name: kb1.composite1_link.composite1_name
+  data:
+    data: composite1_data
+    description: composite1_description
+  volatile_data: {}
+kb1.composite1_link.composite1_name.info1_link.info1_name:
+  ltree_name: kb1.composite1_link.composite1_name.info1_link.info1_name
+  data:
+    data: info1_data
+    description: info1_description
+  volatile_data: {}
+kb1.composite2_link.composite2_name:
+  ltree_name: kb1.composite2_link.composite2_name
+  data:
+    data: composite2_data
+    description: composite2_description
+  volatile_data: {}
+kb1.composite2_link.composite2_name.info2_link.info2_name:
+  ltree_name: kb1.composite2_link.composite2_name.info2_link.info2_name
+  data:
+    data: info2_data
+    description: info2_description
+  volatile_data: {}
+kb2.composite1_link.composite1_name:
+  ltree_name: kb2.composite1_link.composite1_name
+  data:
+    data: composite1_data
+    description: composite1_description
+  volatile_data: {}
+kb2.composite1_link.composite1_name.info1_link.info1_name:
+  ltree_name: kb2.composite1_link.composite1_name.info1_link.info1_name
+  data:
+    data: info1_data
+    description: info1_description
+  volatile_data: {}
+kb2.composite2_link.composite2_name:
+  ltree_name: kb2.composite2_link.composite2_name
+  data:
+    data: composite2_data
+    description: composite2_description
+  volatile_data: {}
+kb2.composite2_link.composite2_name.info2_link.info2_name:
+  ltree_name: kb2.composite2_link.composite2_name.info2_link.info2_name
+  data:
+    data: info2_data
+    description: info2_description
+  volatile_data: {}
