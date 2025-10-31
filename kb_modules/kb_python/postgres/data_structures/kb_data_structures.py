@@ -1,15 +1,17 @@
 from datetime import datetime, timedelta, timezone
 import uuid
+import os
+import sys
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from kb_query_support import KB_Search
-from kb_status_data import KB_Status_Data
-from kb_job_table import KB_Job_Queue
-from kb_stream import KB_Stream
-from kb_rpc_client import KB_RPC_Client
-from kb_rpc_server import KB_RPC_Server
-from kb_link_table import KB_Link_Table
-from kb_link_mount_table import KB_Link_Mount_Table
+from .kb_query_support import KB_Search
+from .kb_status_data import KB_Status_Data
+from .kb_job_table import KB_Job_Queue
+from .kb_stream import KB_Stream
+from .kb_rpc_client import KB_RPC_Client
+from .kb_rpc_server import KB_RPC_Server
+from .kb_link_table import KB_Link_Table
+from .kb_link_mount_table import KB_Link_Mount_Table
 
 class KB_Data_Structures:
     """
@@ -111,7 +113,9 @@ class KB_Data_Structures:
 
 # Example usage:
 if __name__ == "__main__":
-    password = input("Enter PostgreSQL password: ")
+    password = os.getenv("POSTGRES_PASSWORD")
+    if password is None:
+        raise ValueError("POSTGRES_PASSWORD environment variable is not set")
     # Create a new KB_Search instance
     kb_data_structures = KB_Data_Structures(
         dbname="knowledge_base",

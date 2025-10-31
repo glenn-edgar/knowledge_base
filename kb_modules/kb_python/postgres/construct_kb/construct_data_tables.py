@@ -1,14 +1,18 @@
 import psycopg2
 import json
+import os
+import sys
 from psycopg2 import sql
 from psycopg2.extensions import adapt, AsIs
 
-from construct_kb import Construct_KB
-from construct_status_table import Construct_Status_Table
-from construct_job_table import Construct_Job_Table
-from construct_stream_table import Construct_Stream_Table
-from construct_rpc_client_table import Construct_RPC_Client_Table
-from construct_rpc_server_table import Construct_RPC_Server_Table
+from .construct_kb import Construct_KB
+from .construct_status_table import Construct_Status_Table
+from .construct_job_table import Construct_Job_Table
+from .construct_stream_table import Construct_Stream_Table
+from .construct_rpc_client_table import Construct_RPC_Client_Table
+from .construct_rpc_server_table import Construct_RPC_Server_Table
+from .construct_df_bits import BitfieldTableTracker, BitfieldDefinitionManager
+from .generate_bit_field_nodes import Generate_Bit_Field_Nodes
 
 class Construct_Data_Tables:
     """
@@ -41,6 +45,8 @@ class Construct_Data_Tables:
         self.stream_table = Construct_Stream_Table(self.kb.conn, self.kb.cursor, self.kb,database=database)
         self.rpc_client_table = Construct_RPC_Client_Table(self.kb.conn, self.kb.cursor, self.kb,database=database)
         self.rpc_server_table = Construct_RPC_Server_Table(self.kb.conn, self.kb.cursor, self.kb,database=database)
+        self.bitfield_table_tracker = BitfieldTableTracker(self.kb.conn)
+        self.generate_bitfield_nodes = Generate_Bit_Field_Nodes(self.kb.conn, self.kb, BitfieldDefinitionManager)
         self.path = self.kb.path
         self.add_kb = self.kb.add_kb
         self.select_kb = self.kb.select_kb
@@ -55,6 +61,14 @@ class Construct_Data_Tables:
         self.add_rpc_server_field = self.rpc_server_table.add_rpc_server_field
         self.add_status_field = self.status_table.add_status_field
         self.add_job_field = self.job_table.add_job_field
+        
+        self.bitfield_table_tracker.cleanup_all_tables(drop_tables=True, confirm=True)
+        self.bitfield_table_tracker.drop_all_bitfield_tables(confirm=True)
+        self.build_bit_field_table_node = self.generate_bitfield_nodes.generate_bit_field_nodes
+        self.set_bit_flags = self.generate_bitfield_nodes.set_bit_flags
+        self.clear_bit_flags = self.generate_bitfield_nodes.clear_bit_flags
+        
+        
         
     def check_installation(self):
         """
@@ -71,8 +85,17 @@ class Construct_Data_Tables:
         self.rpc_server_table.check_installation()
         
 if __name__ == '__main__':
-    password = input("Enter PostgreSQL password: ")
-    # Example Usage
+    unit_test = False
+    password = os.getenv("POSTGRES_PASSWORD")
+    if password is None:
+        raise ValueError("POSTGRES_PASSWORD environment variable is not set")
+    if len(sys.argv) < 2:
+        unit_test = False
+    elif sys.argv[1] == "True":
+        unit_test = True
+    else:
+        unit_test = False
+    
     # Replace with your actual database credentials
     DB_HOST = "localhost"
     DB_PORT = "5432"
@@ -103,6 +126,20 @@ if __name__ == '__main__':
     kb.add_stream_field("info1_stream",95, "info1_stream")
     kb.add_rpc_client_field("info1_client", 10,"info1_client_description") 
     kb.add_link_mount("info1_link_mount", "info1_link_mount_description")  
+    
+    
+    kb.clear_bit_flags()
+    kb.set_bit_flags("info1_status", 0, "info1_status_description")
+    kb.set_bit_flags("info2_status", 1, "info2_status_description")
+    kb.set_bit_flags("info3_status", 2, "info3_status_description")
+    kb.set_bit_flags("info1_job", 3, "info1_job_description")
+    kb.set_bit_flags("info1_stream", 4, "info1_stream_description")
+    kb.set_bit_flags("info1_client", 5, "info1_client_description")
+    kb.set_bit_flags("info1_link_mount", 6, "info1_link_mount_description")
+    kb.build_bit_field_table_node("bit_table_1", "description of the bit field table")
+    
+
+    
     kb.leave_header_node("header1_link", "header1_name")
     print("\nAfter leave_header_node:")
     print(f"Path: {kb.path}")
@@ -120,7 +157,9 @@ if __name__ == '__main__':
         kb.disconnect()
     except RuntimeError as e:
         print(f"Error during installation check: {e}")
-    exit()
+    if unit_test == False:
+        exit(0)
+    
     kb = Construct_Data_Tables(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DATABASE)
 
     print("Initial state:")
@@ -159,7 +198,8 @@ if __name__ == '__main__':
         kb.disconnect()
     except RuntimeError as e:
         print(f"Error during installation check: {e}")
-    exit()
+    
+    
     
     # teests for complete testinge
     kb = Construct_Data_Tables(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DATABASE)

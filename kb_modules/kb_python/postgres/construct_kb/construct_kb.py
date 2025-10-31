@@ -2,7 +2,7 @@ import psycopg2
 import json
 from psycopg2 import sql
 from psycopg2.extensions import adapt, AsIs
-from base_construct_kb import KnowledgeBaseManager
+from .base_construct_kb import KnowledgeBaseManager
 
 
 class Construct_KB(KnowledgeBaseManager):
@@ -104,14 +104,13 @@ class Construct_KB(KnowledgeBaseManager):
         path = ".".join(self.path[self.working_kb])
         print("path", path)
         KnowledgeBaseManager.add_node(self, self.working_kb, link, node_name, node_properties, node_data,path)
+        return path
        
 
     def add_info_node(self, link, node_name, node_properties, node_data,description=""):
         self.add_header_node(link, node_name, node_properties, node_data,description)
-     
         self.path[self.working_kb].pop()  # Remove node_name
         self.path[self.working_kb].pop()  # Remove link
-        
     
     def leave_header_node(self, label, name):
         """
