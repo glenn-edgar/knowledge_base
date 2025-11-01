@@ -105,19 +105,24 @@ class KB_Bit_Structures(SExpressionProcessor):
             raise Exception(f"Error finding bit structure IDs: {str(e)}")
         
         
-    def find_assemble_bit_data(self, table_dict_rows, clear_flag_data: bool = False):
+    def find_assemble_bit_data(self, table_dict_rows, clear_flag_data: bool = False,user_names =None):
         """
         Extract path values from bit structure query results.
         
         Args:
             table_dict_rows (list): List of result dictionaries
-            
+            clear_flag_data (bool): If True, clear the flag data
+            user_names (list): optional to use assign user_names to the bit data
         Returns:
             list: List of path values
         """
         if not table_dict_rows:
             return []
-        
+        if user_names is not None:
+            if len(user_names) != len(table_dict_rows):
+                raise ValueError(f"Number of user names must match number of table dict rows")
+            for i in range(len(user_names)):
+                table_dict_rows[i]['properties']['user_name'] = user_names[i]
         return_values = {}
         for row in table_dict_rows:
             if clear_flag_data:

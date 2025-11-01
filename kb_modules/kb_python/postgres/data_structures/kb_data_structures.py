@@ -374,7 +374,7 @@ if __name__ == "__main__":
         node_id = node_ids[0]['properties']['record_id']
         self.set_all_ones(node_id)
         self.set_all_zeros(node_id)
-        bit_data = self.find_assemble_bit_data(node_ids,False) # clear bit field 
+        bit_data = self.find_assemble_bit_data(node_ids,False,["user_1"]) # clear bit field 
         
         
         for user_name, data_class in bit_data.items():
