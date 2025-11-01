@@ -11,8 +11,7 @@ from .construct_job_table import Construct_Job_Table
 from .construct_stream_table import Construct_Stream_Table
 from .construct_rpc_client_table import Construct_RPC_Client_Table
 from .construct_rpc_server_table import Construct_RPC_Server_Table
-from .construct_df_bits import BitfieldTableTracker, BitfieldDefinitionManager
-from .generate_bit_field_nodes import Generate_Bit_Field_Nodes
+from .construct_bit_mask_store import Construct_Bit_Mask_Store
 
 class Construct_Data_Tables:
     """
@@ -45,8 +44,7 @@ class Construct_Data_Tables:
         self.stream_table = Construct_Stream_Table(self.kb.conn, self.kb.cursor, self.kb,database=database)
         self.rpc_client_table = Construct_RPC_Client_Table(self.kb.conn, self.kb.cursor, self.kb,database=database)
         self.rpc_server_table = Construct_RPC_Server_Table(self.kb.conn, self.kb.cursor, self.kb,database=database)
-        self.bitfield_table_tracker = BitfieldTableTracker(self.kb.conn)
-        self.generate_bitfield_nodes = Generate_Bit_Field_Nodes(self.kb.conn, self.kb, BitfieldDefinitionManager)
+        self.bit_mask_store = Construct_Bit_Mask_Store(self.kb.conn, self.kb)
         self.path = self.kb.path
         self.add_kb = self.kb.add_kb
         self.select_kb = self.kb.select_kb
@@ -61,12 +59,10 @@ class Construct_Data_Tables:
         self.add_rpc_server_field = self.rpc_server_table.add_rpc_server_field
         self.add_status_field = self.status_table.add_status_field
         self.add_job_field = self.job_table.add_job_field
+        self.create_bit_mask_entry = self.bit_mask_store.create_bit_mask_entry
+        self.add_bit_mask_flag = self.bit_mask_store.add_flag
+        self.clear_bit_mask_flags = self.bit_mask_store.clear_flags
         
-        self.bitfield_table_tracker.cleanup_all_tables(drop_tables=True, confirm=True)
-        self.bitfield_table_tracker.drop_all_bitfield_tables(confirm=True)
-        self.build_bit_field_table_node = self.generate_bitfield_nodes.generate_bit_field_nodes
-        self.set_bit_flags = self.generate_bitfield_nodes.set_bit_flags
-        self.clear_bit_flags = self.generate_bitfield_nodes.clear_bit_flags
         
         
         
@@ -128,17 +124,22 @@ if __name__ == '__main__':
     kb.add_link_mount("info1_link_mount", "info1_link_mount_description")  
     
     
-    kb.clear_bit_flags()
-    kb.set_bit_flags("info1_status", 0, "info1_status_description")
-    kb.set_bit_flags("info2_status", 1, "info2_status_description")
-    kb.set_bit_flags("info3_status", 2, "info3_status_description")
-    kb.set_bit_flags("info1_job", 3, "info1_job_description")
-    kb.set_bit_flags("info1_stream", 4, "info1_stream_description")
-    kb.set_bit_flags("info1_client", 5, "info1_client_description")
-    kb.set_bit_flags("info1_link_mount", 6, "info1_link_mount_description")
-    kb.build_bit_field_table_node("bit_table_1", "description of the bit field table")
     
-
+    kb.clear_bit_mask_flags()
+    kb.add_bit_mask_flag("info2_status", 0, "info2_status_description")
+    kb.add_bit_mask_flag("info2_job", 1, "info2_job_description")
+    kb.add_bit_mask_flag("info2_stream", 2, "info2_stream_description")
+    kb.add_bit_mask_flag("info2_client", 3, "info2_client_description")
+    kb.add_bit_mask_flag("info2_link_mount", 4, "info2_link_mount_description")
+    kb.create_bit_mask_entry("info2_bit_mask", 5, 0, "info2_bit_mask_description")
+    
+    kb.clear_bit_mask_flags()
+    kb.add_bit_mask_flag("info1_status", 0, "info1_status_description")
+    kb.add_bit_mask_flag("info1_job", 1, "info1_job_description")
+    kb.add_bit_mask_flag("info1_stream", 2, "info1_stream_description")
+    kb.add_bit_mask_flag("info1_client", 3, "info1_client_description")
+    kb.add_bit_mask_flag("info1_link_mount", 4, "info1_link_mount_description")
+    kb.create_bit_mask_entry("info1_bit_mask", 5, 0, "info1_bit_mask_description")
     
     kb.leave_header_node("header1_link", "header1_name")
     print("\nAfter leave_header_node:")
@@ -188,6 +189,8 @@ if __name__ == '__main__':
 
     kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, {"data":"header2_data"})
     kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, {"data":"info2_data"})
+ 
+    
     kb.leave_header_node("header2_link", "header2_name")
     print("\nAfter adding and leaving another header node:")
     print(f"Path: {kb.path}")
