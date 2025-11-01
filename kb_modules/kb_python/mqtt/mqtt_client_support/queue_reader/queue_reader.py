@@ -7,7 +7,7 @@ Requires: paho-mqtt >= 1.6 (works with 2.x too)
 
 import time
 import threading
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 import paho.mqtt.client as mqtt
 import json
 
@@ -29,11 +29,12 @@ class QueueReader:
         self._messages: List[Tuple[str, str]] = []
         self._lock = threading.Lock()  # Thread safety for message list
 
-        # Use Callback API v2 to avoid deprecation warnings
+        # Paho v2 API, explicit v3.1.1 protocol + clean_session knob
         self._client = mqtt.Client(
-            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,  # Fixed parameter name
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=client_id,
-            clean_session=clean_session,   # v3.1.1 persistence knob
+            protocol=mqtt.MQTTv311,
+            clean_session=clean_session,
         )
         if username is not None:
             self._client.username_pw_set(username=username, password=password)
@@ -45,26 +46,28 @@ class QueueReader:
 
         self._connected = False
         self._connect_event = threading.Event()
-        self._suback_event = threading.Event()
-        self._suback_pending = 0
+
+        # Per-subscribe mid -> event (race-safe SUBACK tracking)
+        self._sub_events: Dict[int, threading.Event] = {}
+        self._sub_lock = threading.Lock()
+
         self._session_present = False
 
     # ---- callbacks ----
     def _on_connect(self, client, userdata, flags, reason_code, properties):
-        # For CallbackAPIVersion.VERSION2 with MQTT v3.1.1/v5
-        if hasattr(reason_code, 'is_failure'):  # MQTT v5
+        # VERSION2: v3.1.1 gives flags as dict with "session present"
+        if hasattr(reason_code, "is_failure"):  # MQTT v5 path (not used here)
             self._connected = not reason_code.is_failure
-            session_present = flags.session_present if hasattr(flags, 'session_present') else False
+            session_present = getattr(flags, "session_present", False)
         else:  # MQTT v3.1.1
             self._connected = (reason_code == 0)
-            session_present = flags.get('session present', False) if isinstance(flags, dict) else False
-        
+            session_present = flags.get("session present", False) if isinstance(flags, dict) else False
+
         self._session_present = session_present
         print(f"[on_connect] reason_code={reason_code}, session_present={session_present}")
         self._connect_event.set()
 
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, properties):
-        # Updated for CallbackAPIVersion.VERSION2 - now has 6 parameters total
         print(f"[on_disconnect] reason_code={reason_code}")
         self._connected = False
         self._connect_event.clear()
@@ -75,11 +78,11 @@ class QueueReader:
             self._messages.append((msg.topic, payload))
 
     def _on_subscribe(self, client, userdata, mid, reason_codes, properties):
-        # Updated for CallbackAPIVersion.VERSION2
         print(f"[on_subscribe] mid={mid}, reason_codes={reason_codes}")
-        self._suback_pending -= 1
-        if self._suback_pending <= 0:
-            self._suback_event.set()
+        with self._sub_lock:
+            ev = self._sub_events.pop(mid, None)
+        if ev is not None:
+            ev.set()
 
     # ---- ops ----
     def connect(self, timeout: float = 5.0) -> bool:
@@ -88,7 +91,6 @@ class QueueReader:
         try:
             self._client.connect(self.host, self.port, keepalive=self.keepalive)
             self._client.loop_start()
-            # Wait for connection to be established
             if not self._connect_event.wait(timeout):
                 print(f"[connect] Timeout waiting for connection")
                 return False
@@ -100,8 +102,9 @@ class QueueReader:
     def disconnect(self) -> None:
         """Disconnect from broker and stop loop."""
         try:
-            self._client.loop_stop()
+            # Prefer disconnect first, then stop loop (avoids races)
             self._client.disconnect()
+            self._client.loop_stop()
         except Exception as e:
             print(f"[disconnect] Error: {e}")
         finally:
@@ -113,44 +116,46 @@ class QueueReader:
         if not self._connected:
             print("[ensure_subscription] Not connected")
             return False
-        
-        self._suback_event.clear()
-        self._suback_pending += 1
-        
+
         try:
             result, mid = self._client.subscribe(topic, qos=qos)
             if result != mqtt.MQTT_ERR_SUCCESS:
-                self._suback_pending -= 1
                 print(f"[ensure_subscription] subscribe failed with result={result}")
                 return False
-            
-            # Wait for SUBACK
-            if not self._suback_event.wait(timeout):
+
+            # Create a per-mid event and arm after we have mid (race-safe)
+            ev = threading.Event()
+            with self._sub_lock:
+                # If a late SUBACK already arrived (very rare), _on_subscribe would
+                # not find an event; so arm first, then re-check nothing to do.
+                self._sub_events[mid] = ev
+
+            if not ev.wait(timeout):
+                with self._sub_lock:
+                    self._sub_events.pop(mid, None)
                 print("[ensure_subscription] timeout waiting for SUBACK")
-                self._suback_pending -= 1
                 return False
-            
+
             return True
+
         except Exception as e:
             print(f"[ensure_subscription] Error: {e}")
-            self._suback_pending -= 1
             return False
 
     def read_queue(self, topic: str, qos: int = 1, timeout: float = 5.0) -> List[Tuple[str, str]]:
-        """Subscribe (or resubscribe) and collect messages for up to timeout seconds."""
+        """Subscribe (or reuse persistent sub) and collect messages for up to timeout seconds."""
         with self._lock:
             self._messages.clear()
-        
-        # Only subscribe if we don't have a persistent session or if explicitly needed
+
         if not self._session_present:
             if not self.ensure_subscription(topic, qos=qos, timeout=2.0):
                 raise RuntimeError("SUBACK not received; subscription not active")
         else:
             print(f"[read_queue] Using existing subscription from persistent session")
-        
+
         # Collect messages for the specified timeout
         time.sleep(timeout)
-        
+
         with self._lock:
             return list(self._messages)
 
@@ -176,15 +181,15 @@ def main():
     # --- 1) First connect: create persistent session and REGISTER subscription
     print("1. Creating persistent session and registering subscription...")
     reader = QueueReader(
-        host=BROKER, 
+        host=BROKER,
         port=PORT,
         client_id=CLIENT_ID,          # FIXED client id is crucial
         clean_session=False,           # v3.1.1 persistent session
     )
-    
+
     if not reader.connect():
         raise SystemExit("Failed to connect to broker")
-    
+
     try:
         if not reader.ensure_subscription(TOPIC, qos=1, timeout=2.0):
             raise SystemExit("Failed to SUBSCRIBE (no SUBACK). Check broker/ACLs.")
@@ -198,31 +203,32 @@ def main():
     pub = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
         client_id="queue-publisher",
+        protocol=mqtt.MQTTv311,
         clean_session=True
     )
-    
+
     try:
         pub.connect(BROKER, PORT, keepalive=60)
         pub.loop_start()
         time.sleep(0.5)  # Give publisher time to connect
-        
+
         jobs = [
             {"job_id": 301, "op": "compress", "args": {"file": "a.bin"}},
             {"job_id": 302, "op": "resize",   "args": {"image": "img.jpg", "w": 640, "h": 480}},
             {"job_id": 303, "op": "checksum", "args": {"file": "a.bin"}},
         ]
-        
+
         for j in jobs:
             payload = json.dumps(j, separators=(",", ":"))
             info = pub.publish(TOPIC, payload, qos=1, retain=False)
             info.wait_for_publish()
             print(f"  ✓ Published job {j['job_id']}")
-        
+
         time.sleep(0.5)  # Ensure all messages are sent
         print(f"✓ Published {len(jobs)} jobs while consumer offline\n")
     finally:
-        pub.loop_stop()
         pub.disconnect()
+        pub.loop_stop()
 
     # --- 3) Reconnect SAME client id with clean_session=False to resume & drain
     print("3. Reconnecting to retrieve queued messages...")
@@ -232,10 +238,10 @@ def main():
         client_id=CLIENT_ID,          # SAME client id
         clean_session=False,           # must be False to RESUME session
     )
-    
+
     if not reader.connect():
         raise SystemExit("Failed to reconnect to broker")
-    
+
     try:
         msgs = reader.read_queue(TOPIC, qos=1, timeout=3.0)
         print(f"\n✓ Retrieved {len(msgs)} queued messages:")
