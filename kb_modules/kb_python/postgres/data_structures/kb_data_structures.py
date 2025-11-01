@@ -123,7 +123,8 @@ class KB_Data_Structures:
         self.get_flag_data = self.bit_structures.get_flag_data
         self.s_tokenize = self.bit_structures.tokenize
         self.s_execute = self.bit_structures.execute
-        
+        self.set_all_ones = self.bit_structures.set_all_ones
+        self.set_all_zeros = self.bit_structures.set_all_zeros
 
 # Example usage:
 if __name__ == "__main__":
@@ -370,8 +371,10 @@ if __name__ == "__main__":
     def test_bit_structures(self):
         print("***************************  Bit Structures ***************************")
         node_ids = self.find_bit_structure_ids(None, "info1_bit_mask", None, None)
-    
-        bit_data = self.find_assemble_bit_data(node_ids,True) # clear bit field 
+        node_id = node_ids[0]['properties']['record_id']
+        self.set_all_ones(node_id)
+        self.set_all_zeros(node_id)
+        bit_data = self.find_assemble_bit_data(node_ids,False) # clear bit field 
         
         
         for user_name, data_class in bit_data.items():

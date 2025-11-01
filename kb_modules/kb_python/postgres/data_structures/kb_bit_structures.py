@@ -151,6 +151,12 @@ class KB_Bit_Structures(SExpressionProcessor):
     
     def set_bit_mask(self, node_id: str, new_bits: int, change_mask: int = -1) -> bool:
         self.bit_mask_operations.set_bit_mask(node_id, new_bits, change_mask)
+        
+    def set_all_ones(self, node_id: str):
+        self.bit_mask_operations.set_bit_mask(node_id, -1, -1)
+    
+    def set_all_zeros(self, node_id: str):
+        self.bit_mask_operations.set_bit_mask(node_id, 0, -1)
     
     def set_flag_data(self, data_class, flag_data: dict):
         mask = 0
