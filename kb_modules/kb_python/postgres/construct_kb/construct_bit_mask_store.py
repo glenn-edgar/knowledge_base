@@ -15,7 +15,7 @@ class Construct_Bit_Mask_Store:
     def add_flag(self, flag_name, bit_position, flag_description):
         self.bit_mask_flags[flag_name] = {'bit': bit_position, 'description': flag_description}
         
-    def create_bit_mask_entry(self,name, mask_size, bit_mask, description=""):
+    def create_bit_mask_entry(self,user_name, name, mask_size, bit_mask, description=""):
         if not isinstance(name, str):
             raise TypeError("name must be a string")
         if not isinstance(mask_size, int):
@@ -43,6 +43,7 @@ class Construct_Bit_Mask_Store:
     
         self.bit_mask_operations.create_entry(ltree_node_name, bit_mask)
         node_properties = {
+            "user_name": user_name,
             "mask_size": mask_size,
             "bit_mask": bit_mask,
             "flag_dictionary": json.dumps(self.bit_mask_flags),
