@@ -7,6 +7,7 @@ from .construct_job import Construct_Job_Table
 from .construct_stream import Construct_Stream_Table
 from .construct_rpc_client import Construct_RPC_Client_Table
 from .construct_rpc_server import Construct_RPC_Server_Table
+from .construct_bit_mask_store import Construct_Bit_Mask_Store
 
 
 class Construct_Data_Tables:
@@ -36,7 +37,7 @@ class Construct_Data_Tables:
         self.stream_table = Construct_Stream_Table(self.kb.conn, self.kb.cursor, self.kb, database=database)
         self.rpc_client_table = Construct_RPC_Client_Table(self.kb.conn, self.kb.cursor, self.kb, database=database)
         self.rpc_server_table = Construct_RPC_Server_Table(self.kb.conn, self.kb.cursor, self.kb, database=database)
-        
+        self.bit_mask_store = Construct_Bit_Mask_Store(self.kb.conn, self.kb)
         # Expose KB methods and attributes
         self.path = self.kb.path
         self.add_kb = self.kb.add_kb
@@ -54,6 +55,9 @@ class Construct_Data_Tables:
         self.add_rpc_server_field = self.rpc_server_table.add_rpc_server_field
         self.add_status_field = self.status_table.add_status_field
         self.add_job_field = self.job_table.add_job_field
+        self.create_bit_mask_entry = self.bit_mask_store.create_bit_mask_entry
+        self.add_bit_mask_flag = self.bit_mask_store.add_flag
+        self.clear_bit_mask_flags = self.bit_mask_store.clear_flags
         
     def check_installation(self):
         """
@@ -120,6 +124,24 @@ if __name__ == '__main__':
     kb.add_header_node("header2_link", "header2_name", {"prop3": "val3"}, {"data": "header2_data"})
     kb.add_info_node("info2_link", "info2_name", {"prop4": "val4"}, {"data": "info2_data"})
     kb.add_link_node("info1_link_mount")
+    
+    
+    kb.clear_bit_mask_flags()
+    kb.add_bit_mask_flag("A", 0, "A_description")
+    kb.add_bit_mask_flag("B", 1, "B_description")
+    kb.add_bit_mask_flag("C", 2, "C_description")
+    kb.add_bit_mask_flag("D", 3, "D_description")
+    kb.add_bit_mask_flag("E", 4, "E_description")
+    kb.create_bit_mask_entry("user_2", "info2_bit_mask", 5, 0, "info2_bit_mask_description")
+    
+    kb.clear_bit_mask_flags()
+    kb.add_bit_mask_flag("F", 0, "F_description")
+    kb.add_bit_mask_flag("G", 1, "G_description")
+    kb.add_bit_mask_flag("H", 2, "H_description")
+    kb.add_bit_mask_flag("I", 3, "I_description")
+    kb.add_bit_mask_flag("J", 4, "J_description")
+    kb.create_bit_mask_entry("user_1", "info1_bit_mask", 5, 0, "info1_bit_mask_description")
+    
     kb.leave_header_node("header2_link", "header2_name")
     print("\nAfter adding and leaving another header node:")
     print(f"Path: {kb.path}")

@@ -10,6 +10,11 @@ from .kb_rpc_client import KB_RPC_Client
 from .kb_rpc_server import KB_RPC_Server
 from .kb_link_table import KB_Link_Table
 from .kb_link_mount_table import KB_Link_Mount_Table
+from .kb_bit_structures import KB_Bit_Structures
+from .bit_s_expression import KB_BIT_DATA
+
+import json
+
 
 class KB_Data_Structures:
     """
@@ -113,6 +118,23 @@ class KB_Data_Structures:
         self.link_mount_table_find_records_by_mount_path = self.link_mount_table.find_records_by_mount_path
         self.link_mount_table_find_all_link_names = self.link_mount_table.find_all_link_names
         self.link_mount_table_find_all_mount_paths = self.link_mount_table.find_all_mount_paths
+        
+        
+        self.bit_structures = KB_Bit_Structures(self.query_support, database)
+        self.find_bit_structure_ids = self.bit_structures.find_bit_structure_ids
+        self.find_bit_structure_id = self.bit_structures.find_bit_structure_id
+        self.get_bit_mask = self.bit_structures.get_bit_mask
+        self.find_assemble_bit_data = self.bit_structures.find_assemble_bit_data
+        self.assemble_bit_data = self.bit_structures.assemble_bit_data
+        self.get_bit_mask = self.bit_structures.get_bit_mask
+        self.set_bit_mask = self.bit_structures.set_bit_mask
+        self.set_flag_data = self.bit_structures.set_flag_data
+        self.get_flag_data = self.bit_structures.get_flag_data
+        self.s_tokenize = self.bit_structures.tokenize
+        self.s_execute = self.bit_structures.execute
+        self.set_all_ones = self.bit_structures.set_all_ones
+        self.set_all_zeros = self.bit_structures.set_all_zeros
+
     
         
 
@@ -345,6 +367,58 @@ if __name__ == "__main__":
         print(f"Waiting jobs: {waiting_jobs}")
         
         print("\n=== Test Complete ===")
+        
+    def print_bit_data_class(self, data_class):   
+        print("node_id", data_class.node_id)
+        print("user_name", data_class.user_name)
+        print("data_class flags", data_class.flags)
+        print("data_class bit_size", data_class.bit_size)
+        print("data_class node_id", data_class.node_id)
+        print("data_class bit_mask", data_class.bit_mask)
+        print("data_class flag_data", data_class.flag_data)
+        print("data_class flag_change", data_class.flag_change)
+        
+    def test_bit_structures(self):
+        print("***************************  Bit Structures ***************************")
+        node_ids = self.find_bit_structure_ids(None, "info1_bit_mask", None, None)
+        properties = json.loads(node_ids[0]['properties'])
+        node_id = properties['record_id']
+        self.set_all_ones(node_id)
+        self.set_all_zeros(node_id)
+        bit_data = self.find_assemble_bit_data(node_ids,False,["user_1"]) # clear bit field 
+        
+        
+        for user_name, data_class in bit_data.items():
+            print("@@@@@@@@@@@  user_name", user_name)
+            print_bit_data_class(self, data_class)
+        self.set_flag_data(data_class, {"F": 1, "G": 0, "H": 0, "I": 0, "J": 0})
+        self.get_flag_data(data_class)
+        print_bit_data_class(self, data_class)
+        
+        self.set_flag_data(data_class, {"J": 1})
+        self.get_flag_data(data_class)
+        print_bit_data_class(self, data_class)
+        
+        sepression = "(or (and user_1:F user_1:G user_1:H user_1:I user_1:J) (and user_1:F user_1:J))"
+        print("sepression", sepression)
+        result = self.s_tokenize(sepression)
+        #print("result", result)
+        result = self.s_execute(result, bit_data)
+        print("result", result)
+        exparession = "(bit_changed  user_1:J)"
+        print("exparession", exparession)
+        result = self.s_tokenize(exparession)
+        result = self.s_execute(result, bit_data)
+        print("result", result)
+        exparession = "(bit_changed  user_1:F)"
+        print("exparession", exparession)
+        result = self.s_tokenize(exparession)
+        result = self.s_execute(result, bit_data)
+        print("result", result)
+        print("***************************  Bit Structures test complete ***************************")
+            
+        
+    test_bit_structures(kb_data_structures)
 
     """
     Status Data  
