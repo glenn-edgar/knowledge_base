@@ -13,7 +13,7 @@ class Construct_Bit_Mask_Store:
     with knowledge base integration.
     """
     
-    def __init__(self, conn, construct_kb):
+    def __init__(self, conn, construct_kb,upload_flag=False):
         """
         Initialize the bit mask store.
         
@@ -24,7 +24,9 @@ class Construct_Bit_Mask_Store:
         self.bit_mask_operations = BitMaskOperations(conn)
         self.construct_kb = construct_kb 
         self.conn = conn
-        self.bit_mask_operations.create_table()
+        self.upload_flag = upload_flag
+        if self.upload_flag == False:
+            self.bit_mask_operations.create_table()
         self.bit_mask_flags = {}
         
     def clear_flags(self):

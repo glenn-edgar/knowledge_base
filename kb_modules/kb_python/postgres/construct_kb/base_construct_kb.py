@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 
 
 class KnowledgeBaseManager:
-    def __init__(self, table_name: str, connection_params: Dict[str, Any],repair_flag = False):
+    def __init__(self, table_name: str, connection_params: Dict[str, Any],upload_flag = False):
         """
         Initialize the KnowledgeBaseManager with database connection parameters.
         
@@ -17,9 +17,9 @@ class KnowledgeBaseManager:
         self.connection_params = connection_params
         
         self.table_name = table_name
-        self.repair_flag = repair_flag
+        self.upload_flag = upload_flag
         self._connect()
-        if self.repair_flag == False:
+        if self.upload_flag == False:
             self._create_tables()
      
         

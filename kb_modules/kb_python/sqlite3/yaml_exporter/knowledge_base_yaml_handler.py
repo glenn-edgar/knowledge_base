@@ -1,6 +1,4 @@
-import psycopg2
-from psycopg2 import sql
-from psycopg2.extras import RealDictCursor, Json
+import sqlite3
 import json
 import yaml
 from typing import Optional, Dict, Any, List
@@ -8,9 +6,10 @@ from datetime import datetime, date
 from decimal import Decimal
 
 
-class KnowledgeBaseYAMLHandler:
+class KnowledgeBaseYAMLHandlerSQLite:
     """
     Standalone class for exporting and importing knowledge base data to/from YAML.
+    SQLite3 version.
     Does not create or modify table structures.
     
     Import Modes:
@@ -38,26 +37,27 @@ class KnowledgeBaseYAMLHandler:
     link and link_mount table contents to ensure consistency.
     """
     
-    def __init__(self, table_name: str, connection_params: Dict[str, Any]):
+    def __init__(self, table_name: str, db_path: str):
         """
-        Initialize the YAML handler with database connection parameters.
+        Initialize the YAML handler with database path.
         
         Args:
             table_name: Base name of the knowledge base tables
-            connection_params: Dictionary containing database connection parameters
-                             (host, database, user, password, port)
+            db_path: Path to SQLite database file
         """
         self.table_name = table_name
-        self.connection_params = connection_params
+        self.db_path = db_path
         self.conn = None
         self.cursor = None
         
     def connect(self):
         """Establish database connection."""
         try:
-            self.conn = psycopg2.connect(**self.connection_params)
+            self.conn = sqlite3.connect(self.db_path)
+            # Use Row factory to get dict-like access
+            self.conn.row_factory = sqlite3.Row
             self.cursor = self.conn.cursor()
-        except psycopg2.Error as e:
+        except sqlite3.Error as e:
             print(f"Error connecting to database: {e}")
             raise
             
@@ -95,29 +95,33 @@ class KnowledgeBaseYAMLHandler:
         Returns:
             List of dictionaries, one per row
         """
-        with self.conn.cursor(cursor_factory=RealDictCursor) as dict_cursor:
-            query = f"SELECT * FROM {table_name}"
-            
-            if where_clause:
-                query += f" WHERE {where_clause}"
-            
-            if order_by:
-                query += f" ORDER BY {order_by}"
-            
-            dict_cursor.execute(query)
-            records = dict_cursor.fetchall()
-            
-            # Convert to regular dicts and serialize special types
-            serialized_records = [self._serialize_record(dict(record)) for record in records]
+        query = f"SELECT * FROM {table_name}"
+        
+        if where_clause:
+            query += f" WHERE {where_clause}"
+        
+        if order_by:
+            query += f" ORDER BY {order_by}"
+        
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        
+        # Convert Row objects to dicts and serialize special types
+        records = []
+        for row in rows:
+            record = dict(row)
+            serialized_record = self._serialize_record(record)
             
             # Exclude specified columns
             if exclude_columns:
-                serialized_records = [
-                    {k: v for k, v in record.items() if k not in exclude_columns}
-                    for record in serialized_records
-                ]
+                serialized_record = {
+                    k: v for k, v in serialized_record.items() 
+                    if k not in exclude_columns
+                }
             
-            return serialized_records
+            records.append(serialized_record)
+        
+        return records
 
     def export_all_kb_data(self, order_by_path: bool = True) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -220,7 +224,8 @@ class KnowledgeBaseYAMLHandler:
         if include_metadata:
             output['metadata'] = {
                 'exported_at': datetime.now().isoformat(),
-                'table_name': self.table_name
+                'table_name': self.table_name,
+                'database_type': 'sqlite3'
             }
         
         if isinstance(data, dict):
@@ -240,7 +245,7 @@ class KnowledgeBaseYAMLHandler:
 
     def _serialize_record(self, record: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Convert PostgreSQL types to YAML-serializable types.
+        Convert SQLite types to YAML-serializable types.
         
         Args:
             record: Dictionary containing a database row
@@ -258,8 +263,18 @@ class KnowledgeBaseYAMLHandler:
                 serialized[key] = float(value)
             elif isinstance(value, bytes):
                 serialized[key] = value.hex()
+            elif isinstance(value, str):
+                # Try to parse as JSON if it looks like JSON
+                # SQLite stores JSON as TEXT
+                if value.startswith('{') or value.startswith('['):
+                    try:
+                        serialized[key] = json.loads(value)
+                    except (json.JSONDecodeError, ValueError):
+                        serialized[key] = value
+                else:
+                    serialized[key] = value
             else:
-                # Handles str, int, float, bool, dict, list
+                # Handles int, float, bool
                 serialized[key] = value
         
         return serialized
@@ -386,30 +401,44 @@ class KnowledgeBaseYAMLHandler:
             counts = {}
             
             if kb_name_filter:
-                where = f"WHERE knowledge_base = '{kb_name_filter}'"
-                where_parent = f"WHERE parent_node_kb = '{kb_name_filter}'"
+                where = f"WHERE knowledge_base = ?"
+                where_parent = f"WHERE parent_node_kb = ?"
+                params = (kb_name_filter,)
             else:
                 where = ""
                 where_parent = ""
+                params = ()
             
             # Delete in reverse order (links first, then nodes, then info)
-            self.cursor.execute(f"DELETE FROM {self.table_name}_link {where_parent}")
+            if kb_name_filter:
+                self.cursor.execute(f"DELETE FROM {self.table_name}_link {where_parent}", params)
+            else:
+                self.cursor.execute(f"DELETE FROM {self.table_name}_link")
             counts[f"{self.table_name}_link"] = self.cursor.rowcount
             
-            self.cursor.execute(f"DELETE FROM {self.table_name}_link_mount {where}")
+            if kb_name_filter:
+                self.cursor.execute(f"DELETE FROM {self.table_name}_link_mount {where}", params)
+            else:
+                self.cursor.execute(f"DELETE FROM {self.table_name}_link_mount")
             counts[f"{self.table_name}_link_mount"] = self.cursor.rowcount
             
-            self.cursor.execute(f"DELETE FROM {self.table_name} {where}")
+            if kb_name_filter:
+                self.cursor.execute(f"DELETE FROM {self.table_name} {where}", params)
+            else:
+                self.cursor.execute(f"DELETE FROM {self.table_name}")
             counts[self.table_name] = self.cursor.rowcount
             
-            self.cursor.execute(f"DELETE FROM {self.table_name}_info {where}")
+            if kb_name_filter:
+                self.cursor.execute(f"DELETE FROM {self.table_name}_info {where}", params)
+            else:
+                self.cursor.execute(f"DELETE FROM {self.table_name}_info")
             counts[f"{self.table_name}_info"] = self.cursor.rowcount
             
             self.conn.commit()
             
             return counts
             
-        except psycopg2.Error as e:
+        except sqlite3.Error as e:
             self.conn.rollback()
             print(f"Error clearing tables: {e}")
             raise
@@ -437,12 +466,12 @@ class KnowledgeBaseYAMLHandler:
         if not records:
             return 0
         
-        # Define conflict columns for each table
+        # Define conflict columns for each table (for SQLite UPSERT)
         conflict_targets = {
-            self.table_name: '(path)',
-            f"{self.table_name}_info": '(knowledge_base)',
-            f"{self.table_name}_link": '(link_name, parent_node_kb, parent_path)',
-            f"{self.table_name}_link_mount": '(link_name)'
+            self.table_name: 'path',
+            f"{self.table_name}_info": 'knowledge_base',
+            f"{self.table_name}_link": 'link_name, parent_node_kb, parent_path',
+            f"{self.table_name}_link_mount": 'link_name'
         }
         
         count = 0
@@ -462,27 +491,21 @@ class KnowledgeBaseYAMLHandler:
             # Keep has_link and has_link_mount - they'll be recalculated after import
             record = {k: v for k, v in record.items() if k not in ['id']}
             
-            # Handle JSON fields - wrap dicts with Json() adapter
+            # Handle JSON fields - convert dicts/lists to JSON strings for SQLite
             if table_name == self.table_name:
                 for json_field in ['properties', 'data']:
                     if json_field in record:
-                        # If it's a dict or list, wrap it with Json()
+                        # If it's a dict or list, convert to JSON string
                         if isinstance(record[json_field], (dict, list)):
-                            record[json_field] = Json(record[json_field])
-                        # If it's a string, parse it first then wrap
-                        elif isinstance(record[json_field], str):
-                            try:
-                                parsed = json.loads(record[json_field])
-                                record[json_field] = Json(parsed)
-                            except json.JSONDecodeError:
-                                # If it fails to parse, leave it as is
-                                pass
+                            record[json_field] = json.dumps(record[json_field])
+                        # If it's already a string, leave it as is
             
             # Build INSERT query
             columns = list(record.keys())
             values = [record[col] for col in columns]
             
-            placeholders = ', '.join(['%s'] * len(columns))
+            # SQLite uses ? placeholders
+            placeholders = ', '.join(['?'] * len(columns))
             columns_sql = ', '.join(columns)
             
             # Get the conflict target for this table
@@ -491,19 +514,20 @@ class KnowledgeBaseYAMLHandler:
             if update_existing:
                 # Build UPDATE clause for all columns except the conflict target
                 update_cols = [col for col in columns if col not in ['id', 'created_at']]
-                update_set = ', '.join([f"{col} = EXCLUDED.{col}" for col in update_cols])
+                update_set = ', '.join([f"{col} = excluded.{col}" for col in update_cols])
                 
+                # SQLite UPSERT syntax
                 query = f"""
                     INSERT INTO {table_name} ({columns_sql})
                     VALUES ({placeholders})
-                    ON CONFLICT {conflict_target} DO UPDATE SET
+                    ON CONFLICT({conflict_target}) DO UPDATE SET
                     {update_set}
                 """
             else:
+                # SQLite INSERT OR IGNORE
                 query = f"""
-                    INSERT INTO {table_name} ({columns_sql})
+                    INSERT OR IGNORE INTO {table_name} ({columns_sql})
                     VALUES ({placeholders})
-                    ON CONFLICT DO NOTHING
                 """
             
             self.cursor.execute(query, values)
@@ -525,43 +549,73 @@ class KnowledgeBaseYAMLHandler:
         counts = {}
         
         if kb_name_filter:
-            where_clause = f"WHERE knowledge_base = '{kb_name_filter}'"
+            where_clause = f"WHERE knowledge_base = ?"
+            params = (kb_name_filter,)
         else:
             where_clause = ""
+            params = ()
         
         # Reset all flags to False (for filtered KB if specified)
-        self.cursor.execute(f"""
-            UPDATE {self.table_name} 
-            SET has_link = FALSE, has_link_mount = FALSE
-            {where_clause}
-        """)
+        if kb_name_filter:
+            self.cursor.execute(f"""
+                UPDATE {self.table_name} 
+                SET has_link = 0, has_link_mount = 0
+                {where_clause}
+            """, params)
+        else:
+            self.cursor.execute(f"""
+                UPDATE {self.table_name} 
+                SET has_link = 0, has_link_mount = 0
+            """)
         counts['reset'] = self.cursor.rowcount
         
         # Set has_link = TRUE for nodes that have entries in link table
         if kb_name_filter:
-            kb_condition = f"AND kb.knowledge_base = '{kb_name_filter}'"
+            kb_condition = f"AND kb.knowledge_base = ?"
+            self.cursor.execute(f"""
+                UPDATE {self.table_name} AS kb
+                SET has_link = 1
+                WHERE EXISTS (
+                    SELECT 1 FROM {self.table_name}_link AS link
+                    WHERE kb.path = link.parent_path
+                    AND kb.knowledge_base = link.parent_node_kb
+                    {kb_condition}
+                )
+            """, params)
         else:
-            kb_condition = ""
-        
-        self.cursor.execute(f"""
-            UPDATE {self.table_name} AS kb
-            SET has_link = TRUE
-            FROM {self.table_name}_link AS link
-            WHERE kb.path = link.parent_path
-            AND kb.knowledge_base = link.parent_node_kb
-            {kb_condition}
-        """)
+            self.cursor.execute(f"""
+                UPDATE {self.table_name}
+                SET has_link = 1
+                WHERE EXISTS (
+                    SELECT 1 FROM {self.table_name}_link AS link
+                    WHERE {self.table_name}.path = link.parent_path
+                    AND {self.table_name}.knowledge_base = link.parent_node_kb
+                )
+            """)
         counts['has_link_set'] = self.cursor.rowcount
         
         # Set has_link_mount = TRUE for nodes that have entries in link_mount table
-        self.cursor.execute(f"""
-            UPDATE {self.table_name} AS kb
-            SET has_link_mount = TRUE
-            FROM {self.table_name}_link_mount AS mount
-            WHERE kb.path = mount.mount_path
-            AND kb.knowledge_base = mount.knowledge_base
-            {kb_condition}
-        """)
+        if kb_name_filter:
+            self.cursor.execute(f"""
+                UPDATE {self.table_name} AS kb
+                SET has_link_mount = 1
+                WHERE EXISTS (
+                    SELECT 1 FROM {self.table_name}_link_mount AS mount
+                    WHERE kb.path = mount.mount_path
+                    AND kb.knowledge_base = mount.knowledge_base
+                    {kb_condition}
+                )
+            """, params)
+        else:
+            self.cursor.execute(f"""
+                UPDATE {self.table_name}
+                SET has_link_mount = 1
+                WHERE EXISTS (
+                    SELECT 1 FROM {self.table_name}_link_mount AS mount
+                    WHERE {self.table_name}.path = mount.mount_path
+                    AND {self.table_name}.knowledge_base = mount.knowledge_base
+                )
+            """)
         counts['has_link_mount_set'] = self.cursor.rowcount
         
         return counts
@@ -569,29 +623,18 @@ class KnowledgeBaseYAMLHandler:
 
 # Example usage
 if __name__ == "__main__":
-    import os
+    # SQLite database pat
     import sys
-    
-    if len(sys.argv) < 2:
-        print("Usage: python knowledge_base_yaml_handler.py <yaml_file_name>")
-        print("Example: python  export_db.yaml")
+    if len(sys.argv) < 3:
+        print("Usage: python knowledge_base_yaml_handler.py <database_file.db>,<yaml_file_name>")
+        print("Example: python knowledge_base_yaml_handler.py knowledge_base.db","export_db.yaml")
         exit(1)
-    yaml_file_name = sys.argv[1]
-    password = os.getenv("POSTGRES_PASSWORD")
-    if password is None:
-        raise ValueError("POSTGRES_PASSWORD environment variable is not set")
-    
-    conn_params = {
-        'host': 'localhost',
-        'database': 'knowledge_base',
-        'user': 'gedgar',
-        'password': password,
-        'port': 5432
-    }
+    db_path = sys.argv[1]
+    yaml_file_name = sys.argv[2]
     
     # Using context manager for automatic connection handling
     print("\n=== EXPORT Example ===")
-    with KnowledgeBaseYAMLHandler('knowledge_base', conn_params) as handler:
+    with KnowledgeBaseYAMLHandlerSQLite('knowledge_base', db_path) as handler:
         # Export all data (now includes has_link and has_link_mount)
         handler.export_to_yaml(yaml_file_name)
         
@@ -599,27 +642,18 @@ if __name__ == "__main__":
         #handler.export_to_yaml('kb_export_kb1.yaml', kb_name='kb1')
         
         # Export without metadata
-        #handler.export_to_yaml('kb_export_simple.yaml', include_metadata=False)
+        #andler.export_to_yaml('kb_export_simple.yaml', include_metadata=False)
     
     
     print("\n=== IMPORT Example ===")
-    with KnowledgeBaseYAMLHandler('knowledge_base', conn_params) as handler:
+    with KnowledgeBaseYAMLHandlerSQLite('knowledge_base', db_path) as handler:
         # Import from file (skip conflicts - default behavior)
         # Flags are automatically recalculated after import
         counts = handler.import_from_yaml(yaml_file_name)
         print(f"Import counts (skip conflicts): {counts}")
         exit(0)
         # Import and update existing records (upsert)
-        counts = handler.import_from_yaml('kb_export_kb1.yaml', 
-                                          clear_existing=False,
-                                          update_existing=True)
-        print(f"Import counts (upsert): {counts}")
         
-        # Import without recalculating flags (use YAML values as-is)
-        # Not recommended unless you're sure the YAML values are correct
-        counts = handler.import_from_yaml('kb_export_kb1.yaml',
-                                          recalculate_flags=False)
-        print(f"Import counts (no flag recalc): {counts}")
         
         # Import and replace all existing data for specific KB
         # counts = handler.import_from_yaml('kb_export_kb1.yaml', 

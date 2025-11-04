@@ -146,7 +146,6 @@ if __name__ == "__main__":
         sys.exit(1)
     
     db_file = sys.argv[1]
-    
     # Create a new KB_Data_Structures instance
     kb_data_structures = KB_Data_Structures(
         db_file=db_file,

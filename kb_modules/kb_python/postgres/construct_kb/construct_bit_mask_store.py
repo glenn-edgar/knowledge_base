@@ -2,12 +2,12 @@ import json
 from .bit_mask_operations import BitMaskOperations
 
 class Construct_Bit_Mask_Store:
-    def __init__(self, conn, construct_kb,repair_flag=False):
+    def __init__(self, conn, construct_kb,upload_flag=False):
         self.bit_mask_operations = BitMaskOperations(conn)
         self.construct_kb = construct_kb 
         self.conn = conn
-        self.repair_flag = repair_flag
-        if self.repair_flag == False:
+        self.upload_flag = upload_flag
+        if self.upload_flag == False:
             self.bit_mask_operations.create_table()
         self.bit_mask_flags = {}
         

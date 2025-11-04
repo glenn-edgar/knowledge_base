@@ -18,7 +18,7 @@ class KB_Stream:
     - valid INTEGER (0 or 1, default 1)
     """
     
-    def __init__(self, kb_search, database):
+    def __init__(self, kb_search, database,reset_flag = False):
         """
         Initialize the KB_Stream object.
         

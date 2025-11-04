@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List, Tuple
 
 
 class KnowledgeBaseManager:
-    def __init__(self, table_name: str, db_path: str, ltree_extension_path: str = None, reset: bool = False):
+    def __init__(self, table_name: str, db_path: str, ltree_extension_path: str = None, upload_flag: bool = False):
         """
         Initialize the KnowledgeBaseManager with SQLite database path.
         
@@ -43,7 +43,9 @@ class KnowledgeBaseManager:
         
         self.ltree_extension_path = ltree_extension_path
         self._connect()
-        self._create_tables(reset=reset)
+        self.upload_flag = upload_flag
+        if self.upload_flag == False:
+            self._create_tables()
         
     def _connect(self):
         """Establish database connection and load ltree extension."""
@@ -98,7 +100,7 @@ class KnowledgeBaseManager:
             print(f"Error deleting table {table_name}: {e}")
             raise
             
-    def _create_tables(self, reset: bool = False):
+    def _create_tables(self):
         """
         Create knowledge base tables with the supplied table name.
         If reset=True, delete existing tables first.
@@ -107,12 +109,11 @@ class KnowledgeBaseManager:
             reset: If True, delete existing tables before creating (default: False)
         """
         
-        # Only delete tables if reset is True
-        if reset:
-            self._delete_table(self.table_name)
-            self._delete_table(f"{self.table_name}_info")
-            self._delete_table(f"{self.table_name}_link")
-            self._delete_table(f"{self.table_name}_link_mount")
+        
+        self._delete_table(self.table_name)
+        self._delete_table(f"{self.table_name}_info")
+        self._delete_table(f"{self.table_name}_link")
+        self._delete_table(f"{self.table_name}_link_mount")
         
         try:
             # Create knowledge base table (conditionally)

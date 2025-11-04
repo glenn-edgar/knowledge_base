@@ -9,14 +9,16 @@ class Construct_RPC_Server_Table:
     and info nodes, using a stack-based approach to manage the path. It also
     manages a connection to a SQLite database and sets up the schema.
     """
-    def __init__(self, conn, cursor, construct_kb, database):
+    def __init__(self, conn, cursor, construct_kb, database,upload_flag=False):
         self.conn = conn
         self.cursor = cursor
         self.construct_kb = construct_kb
         self.database = database
         self.table_name = self.database + "_rpc_server"
         # Execute the SQL script to set up the schema
-        self._setup_schema()
+        self.upload_flag = upload_flag
+        if self.upload_flag == False:
+            self._setup_schema()
 
     def _setup_schema(self):
         """

@@ -19,7 +19,7 @@ class Construct_Data_Tables:
     and info nodes, using a stack-based approach to manage the path. It also
     manages a connection to a PostgreSQL database and sets up the schema.
     """
-    def __init__(self, host, port, dbname, user, password, database,repair_flag = False):
+    def __init__(self, host, port, dbname, user, password, database,upload_flag = False):
         """
         Initializes the Construct_Data_Tables object by creating instances of all required
         table constructor classes and connecting to the PostgreSQL database.
@@ -33,18 +33,18 @@ class Construct_Data_Tables:
             database (str): base knowledge base table name
         """
         # Create KB as an attribute instead of inheriting from it
-        self.kb = Construct_KB(host, port, dbname, user, password, database,repair_flag)
+        self.kb = Construct_KB(host, port, dbname, user, password, database,upload_flag)
         
         
         
         # Create instances of all table constructors as attributes
-        self.status_table = Construct_Status_Table(self.kb.conn, self.kb.cursor, construct_kb=self.kb,database=database,repair_flag=repair_flag)
+        self.status_table = Construct_Status_Table(self.kb.conn, self.kb.cursor, construct_kb=self.kb,database=database,upload_flag=upload_flag)
         
-        self.job_table = Construct_Job_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,repair_flag=repair_flag)
-        self.stream_table = Construct_Stream_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,repair_flag=repair_flag)
-        self.rpc_client_table = Construct_RPC_Client_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,repair_flag=repair_flag)
-        self.rpc_server_table = Construct_RPC_Server_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,repair_flag=repair_flag)
-        self.bit_mask_store = Construct_Bit_Mask_Store(self.kb.conn, self.kb,repair_flag=repair_flag)
+        self.job_table = Construct_Job_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,upload_flag=upload_flag)
+        self.stream_table = Construct_Stream_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,upload_flag=upload_flag)
+        self.rpc_client_table = Construct_RPC_Client_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,upload_flag=upload_flag)
+        self.rpc_server_table = Construct_RPC_Server_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,upload_flag=upload_flag)
+        self.bit_mask_store = Construct_Bit_Mask_Store(self.kb.conn, self.kb,upload_flag=upload_flag)
         self.path = self.kb.path
         self.add_kb = self.kb.add_kb
         self.select_kb = self.kb.select_kb
@@ -88,12 +88,18 @@ if __name__ == '__main__':
     if len(sys.argv) < 3:
         unit_test = False
     else:
-        unit_test = sys.argv[2]
+        if sys.argv[2] == "True":
+            unit_test = True
+        else:
+            unit_test = False
     
     if len(sys.argv) <2:
-        repair_flag = False
+        upload_flag = False
     else:
-        repair_flag = sys.argv[1]
+        if sys.argv[1] == "True":
+            upload_flag = True
+        else:
+            upload_flag = False
         
     
     # Replace with your actual database credentials
@@ -104,8 +110,8 @@ if __name__ == '__main__':
     DB_PASSWORD = password
     DATABASE = "knowledge_base"
     
-    kb = Construct_Data_Tables(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DATABASE, repair_flag)
-    if repair_flag == False:
+    kb = Construct_Data_Tables(DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DATABASE, upload_flag)
+    if upload_flag == False:
         print("Initial state:")
         print(f"Path: {kb.path}")
         kb.add_kb("kb1", "First knowledge base")
