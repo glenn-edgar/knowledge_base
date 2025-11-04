@@ -12,7 +12,7 @@ class Construct_KB(KnowledgeBaseManager):
     manages a connection to a PostgreSQL database and sets up the schema.
     """
 
-    def __init__(self, host, port, dbname, user, password, table_name="knowledge_base"):
+    def __init__(self, host, port, dbname, user, password, table_name="knowledge_base",repair_flag = False):
         """
         Initializes the Construct_KB object and connects to the PostgreSQL database.
         Also sets up the database schema.
@@ -37,7 +37,7 @@ class Construct_KB(KnowledgeBaseManager):
             'user': user,
             'password': password
         }  
-        KnowledgeBaseManager.__init__(self, table_name, connection_params)
+        KnowledgeBaseManager.__init__(self, table_name, connection_params,repair_flag)
         
         
     def get_db_objects(self):

@@ -9,15 +9,16 @@ class Construct_Status_Table:
     and info nodes, using a stack-based approach to manage the path. It also
     manages a connection to a PostgreSQL database and sets up the schema.
     """
-    def __init__(self, conn, cursor,construct_kb,database):
+    def __init__(self, conn, cursor,construct_kb,database,repair_flag=False):
         self.conn = conn
         self.cursor = cursor
         self.construct_kb = construct_kb
         self.database = database
         self.table_name = self.database + "_status"
         print(f"database: {self.database}")
-       
-        self._setup_schema()
+        self.repair_flag = repair_flag
+        if self.repair_flag == False:
+            self._setup_schema()
         
     def _setup_schema(self):
         """

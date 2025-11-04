@@ -198,9 +198,11 @@ class KB_Ltree_Search:
             query: The ltree query pattern
         """
         try:
-            
+        
             regex_pattern = self._convert_ltree_query_to_regex(query)
-            return bool(re.match(regex_pattern, path))
+            query_result = bool(re.match(regex_pattern, path))
+        
+            return query_result
         except Exception:
             return False
     
@@ -393,7 +395,8 @@ class KB_Ltree_Search:
         results = []
         
         for path, node in self.data.items():
-            if self.ltree_match(path, pattern):
+            
+            if self.ltree_match(node['ltree_name'], pattern):
                 results.append(node)
         
         results.sort(key=lambda x: x['ltree_name'])
@@ -431,7 +434,6 @@ class KB_Ltree_Search:
                     results.append(node)
         
         elif operator == '~':  # lquery match
-            
             return self.query(path1)
         
         elif operator == '@@':  # ltxtquery match

@@ -21,7 +21,7 @@ class SearchMemDB(KB_Ltree_Search):
         self.decoded_keys = {}
         for key in data.keys():
             self.decoded_keys[key] = key.split(".")
-            kb = self.decoded_keys[key][0]
+            kb = self.decoded_keys[key][1]
             label = self.decoded_keys[key][-2]
             name =  self.decoded_keys[key][-1]
             if kb not in self.kbs:
@@ -105,14 +105,14 @@ class SearchMemDB(KB_Ltree_Search):
     def search_property_key(self, data_key):
         new_filter_results = {}
         for key in self.filter_results.keys():
-            value = self.data[key]
+            value = self.data[key]['node_dict']
             
             if data_key in value:
                 new_filter_results[key] = self.filter_results[key]
         self.filter_results = new_filter_results
         return self.filter_results
     
-    def search_property_value(self, data_key, data_value):
+    def search_node_property_value(self, data_key, data_value):
         """
         Add a filter to search for rows where the properties JSON field contains 
         the specified key with the specified value.
@@ -123,35 +123,51 @@ class SearchMemDB(KB_Ltree_Search):
         """
         new_filter_results = {}
         for key in self.filter_results.keys():
-            value = self.data[key]
+            value = self.data[key]['node_dict']
             if data_key in value:
                  if data_value == value[data_key]:
                     new_filter_results[key] = self.filter_results[key]
         self.filter_results = new_filter_results
         return self.filter_results
     
-
+    def search_label_property_value(self, data_key, data_value):
+        """
+        Add a filter to search for rows where the label properties JSON field contains 
+        the specified key with the specified value.
+        """
+        new_filter_results = {}
+        for key in self.filter_results.keys():
+            value = self.data[key]['label_dict']
+            if data_key in value:
+                 if data_value == value[data_key]:
+                    new_filter_results[key] = self.filter_results[key]
+        self.filter_results = new_filter_results
+        return self.filter_results
 
 
     def search_starting_path(self, starting_path):
         """
         Version that returns filtered results without modifying the original filter_results.
         """
-      
+        
         if not isinstance(starting_path, str):
             raise ValueError("starting_path must be a string")
-        
+        if len(starting_path.split(".")) % 2 != 0:
+            raise ValueError("Starting path must have an even number of parts")
         new_filter_results = {}
-        
+
         # Add starting path if it exists
         if starting_path in self.filter_results:
             new_filter_results[starting_path] = self.filter_results[starting_path]
         else:
-            self.filter_results = {}
+            return {}
         
         # Get and add descendants
         try:
+    
             starting_path_list = self.query_descendants(starting_path)
+        
+            
             if starting_path_list:
                 for item in starting_path_list:
                     if item['ltree_name'] in self.filter_results:
@@ -176,6 +192,7 @@ class SearchMemDB(KB_Ltree_Search):
                 - 'docs.technical.*' for all children of docs.technical
                 - '*.technical.*' for any path containing 'technical'
         """
+    
         search_results = self.query_by_operator(operator,starting_path)
         
         new_filter_results = {}
@@ -205,7 +222,7 @@ class SearchMemDB(KB_Ltree_Search):
         
         for row_key in self.data.keys():
             row_data = self.data[row_key]
-            data = row_data['data']
+            data = row_data['label_dict']
             description = data.get('description', '') 
             return_values[row_key] = description
         return return_values
@@ -217,34 +234,36 @@ if __name__ == "__main__":
         sys.exit(1)
     yaml_file = sys.argv[1]
     kb = SearchMemDB(yaml_file_name=yaml_file)
+    print("\n----------------------------------")
     print("decoded_keys keys: ",kb.decoded_keys.keys())
     kb.clear_filters()
-    print("----------------------------------")
     kb.search_kb("kb1")
     print("----------------------------------")
     print("search kb: ",kb.filter_results.keys())
     print("----------------------------------")
-    kb.search_label("info1_link")
+    kb.search_label("info1_label")
     print("search label: ",kb.filter_results.keys())
     kb.search_name("info1_name")
     print("----------------------------------")
     print("search name: ",kb.filter_results.keys())
-    
-    kb.clear_filters()
-    print("search_property_key",kb.search_property_value('data','info1_data'))
     print("----------------------------------")
     kb.clear_filters()
-    print("search property key: ",kb.search_property_key("data"))
+    print("search_node_property_value",kb.search_node_property_value('data','info1_data'))
     print("----------------------------------")
     
     kb.clear_filters()
-    print("search_starting_path",kb.search_starting_path("kb2.header2_link.header2_name"))
+    print("search_label_property_value",kb.search_label_property_value('description','info1_description'))
+    print("----------------------------------")
+
+    kb.clear_filters()
+    print("search_starting_path",kb.search_starting_path("kb.kb2.composite1_label.composite1_name"))
+    print("----------------------------------")
+
+    kb.clear_filters()
+    print("search_path",kb.search_path("~","kb.kb2.**"))
     print("----------------------------------")
     kb.clear_filters()
-    print("search_path",kb.search_path("~","kb2.**"))
-    print("----------------------------------")
-    kb.clear_filters()
-    print("find_descriptions",kb.find_descriptions("kb2.header2_link.header2_name"))
+    print("find_descriptions",kb.find_descriptions("kb2.header2_label.header2_name"))
     print("----------------------------------")
     
     

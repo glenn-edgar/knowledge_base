@@ -1,48 +1,64 @@
-kb1.composite1_link.composite1_name:
-  ltree_name: kb1.composite1_link.composite1_name
-  data:
-    data: composite1_data
+kb.kb1.composite1_label.composite1_name:
+  ltree_name: kb.kb1.composite1_label.composite1_name
+  label_dict:
+    link: composite1_link
     description: composite1_description
-  volatile_data: {}
-kb1.composite1_link.composite1_name.info1_link.info1_name:
-  ltree_name: kb1.composite1_link.composite1_name.info1_link.info1_name
-  data:
-    data: info1_data
-    description: info1_description
-  volatile_data: {}
-kb1.composite2_link.composite2_name:
-  ltree_name: kb1.composite2_link.composite2_name
-  data:
-    data: composite2_data
-    description: composite2_description
-  volatile_data: {}
-kb1.composite2_link.composite2_name.info2_link.info2_name:
-  ltree_name: kb1.composite2_link.composite2_name.info2_link.info2_name
-  data:
-    data: info2_data
-    description: info2_description
-  volatile_data: {}
-kb2.composite1_link.composite1_name:
-  ltree_name: kb2.composite1_link.composite1_name
-  data:
+  node_dict:
     data: composite1_data
-    description: composite1_description
   volatile_data: {}
-kb2.composite1_link.composite1_name.info1_link.info1_name:
-  ltree_name: kb2.composite1_link.composite1_name.info1_link.info1_name
-  data:
-    data: info1_data
+kb.kb1.composite1_label.composite1_name.info1_label.info1_name:
+  ltree_name: kb.kb1.composite1_label.composite1_name.info1_label.info1_name
+  label_dict:
+    link: info1_link
     description: info1_description
+  node_dict:
+    data: info1_data
   volatile_data: {}
-kb2.composite2_link.composite2_name:
-  ltree_name: kb2.composite2_link.composite2_name
-  data:
-    data: composite2_data
+kb.kb1.composite2_label.composite2_name:
+  ltree_name: kb.kb1.composite2_label.composite2_name
+  label_dict:
+    link: composite2_link
     description: composite2_description
+  node_dict:
+    data: composite2_data
   volatile_data: {}
-kb2.composite2_link.composite2_name.info2_link.info2_name:
-  ltree_name: kb2.composite2_link.composite2_name.info2_link.info2_name
-  data:
-    data: info2_data
+kb.kb1.composite2_label.composite2_name.info2_label.info2_name:
+  ltree_name: kb.kb1.composite2_label.composite2_name.info2_label.info2_name
+  label_dict:
+    link: info2_link
     description: info2_description
+  node_dict:
+    data: info2_data
+  volatile_data: {}
+kb.kb2.composite1_label.composite1_name:
+  ltree_name: kb.kb2.composite1_label.composite1_name
+  label_dict:
+    link: composite1_link
+    description: composite1_description
+  node_dict:
+    data: composite1_data
+  volatile_data: {}
+kb.kb2.composite1_label.composite1_name.info1_label.info1_name:
+  ltree_name: kb.kb2.composite1_label.composite1_name.info1_label.info1_name
+  label_dict:
+    link: info1_link
+    description: info1_description
+  node_dict:
+    data: info1_data
+  volatile_data: {}
+kb.kb2.composite2_label.composite2_name:
+  ltree_name: kb.kb2.composite2_label.composite2_name
+  label_dict:
+    link: composite2_link
+    description: composite2_description
+  node_dict:
+    data: composite2_data
+  volatile_data: {}
+kb.kb2.composite2_label.composite2_name.info2_label.info2_name:
+  ltree_name: kb.kb2.composite2_label.composite2_name.info2_label.info2_name
+  label_dict:
+    link: info2_link
+    description: info2_description
+  node_dict:
+    data: info2_data
   volatile_data: {}
