@@ -17,7 +17,7 @@ class QueueOperationError(Exception):
     pass
 
 
-class LTreeJsonDB:
+class KB_Document_Table:
     """
     JSONB operations on ltree document database with queue support.
     Assumes records already exist and are managed by another class.
@@ -31,16 +31,114 @@ class LTreeJsonDB:
     
     def __init__(self, 
                  conn, 
-                 table_name: str = "knowledge_base_documents"):
+                 kb_search,
+                 database):
         """
         Initialize the JSONB database operations.
         
         Args:
             conn: psycopg2 connection object
-            table_name: Name of the table to operate on
+            kb_search: Knowledge base search object
+            database: Database name prefix
         """
         self.conn = conn
-        self.table_name = table_name
+        self.database = database
+        self.table_name = database + "_document"
+        self.kb_search = kb_search
+        
+    def find_document_id(self, kb=None, node_name=None, properties=None, node_path=None):
+        """
+        Find a single job id for given parameters. Raises error if 0 or multiple jobs found.
+        
+        Args:
+            kb: Knowledge base filter
+            node_name (str, optional): Node name to search for
+            properties (dict, optional): Properties to match
+            node_path (str, optional): LTREE path to match
+            
+        Returns:
+            dict: Single matching job record with field names
+            
+        Raises:
+            ValueError: If no job or multiple jobs found
+        """
+        
+        results = self.find_document_ids(kb, node_name, properties, node_path)
+        
+        if len(results) == 0:
+            raise ValueError(f"No job found matching parameters: name={node_name}, properties={properties}, path={node_path}")
+        if len(results) > 1:
+            raise ValueError(f"Multiple jobs ({len(results)}) found matching parameters: name={node_name}, properties={properties}, path={node_path}")
+        
+        return results[0]
+    
+    def find_document_ids(self, kb=None, node_name=None, properties=None, node_path=None):
+        """
+        Find all job ids matching the given parameters.
+        
+        Args:
+            kb: Knowledge base filter
+            node_name (str, optional): Node name to search for
+            properties (dict, optional): Properties to match
+            node_path (str, optional): LTREE path to match
+            
+        Returns:
+            list: List of matching job records as dictionaries
+            
+        Raises:
+            ValueError: If no jobs found
+        """
+        
+        try:
+            # Clear previous filters and build new query
+            self.kb_search.clear_filters()
+            self.kb_search.search_label("KB_JSONB_FIELD")
+            
+            if kb is not None:
+                self.kb_search.search_kb(kb)
+                
+            if node_name is not None:
+                self.kb_search.search_name(node_name)
+            if properties is not None and isinstance(properties, dict):
+                for key, value in properties.items():
+                    self.kb_search.search_property_value(key, value)
+            if node_path is not None:
+                self.kb_search.search_path(node_path)
+            
+            # Execute query and get results
+            node_ids = self.kb_search.execute_query()
+            
+            if not node_ids or len(node_ids) == 0:
+                raise ValueError(f"No jobs found matching parameters: name={node_name}, properties={properties}, path={node_path}")
+            
+            return node_ids
+            
+        except Exception as e:
+            if isinstance(e, ValueError):
+                raise
+            raise Exception(f"Error finding document IDs: {str(e)}")
+    
+    def find_document_paths(self, table_dict_rows):
+        """
+        Extract path values from document query results.
+        
+        Args:
+            table_dict_rows (list): List of result dictionaries
+            
+        Returns:
+            list: List of path values
+        """
+        if not table_dict_rows:
+            return []
+        
+        return_values = []
+        for row in table_dict_rows:
+            # Since we always use RealDictCursor, row will always be a dictionary
+            path = row.get('path')
+            if path is not None:
+                return_values.append(path)
+        
+        return return_values
     
     # ===== Core JSONB Operations =====
     
@@ -55,32 +153,43 @@ class LTreeJsonDB:
         Args:
             ltree_path: The document ltree path
             json_path: JSON path in format "field" or "field.subfield"
+                      Use "" or "{}" to get entire data field
             as_text: If True, use ->> (text), else use -> (JSON)
             doc_type: Optional document type filter
             
         Returns:
             The value at the JSON path, or None if not found
         """
-        # Convert dot notation to PostgreSQL path operators
-        path_parts = json_path.split('.')
-        
-        # Build the accessor chain and params list
-        # SQL format: SELECT {accessor} FROM table WHERE ltree = %s
-        # Params order: [accessor_params..., ltree_path, doc_type?]
-        if len(path_parts) == 1:
-            # Single key: use -> or ->>
-            operator = "->>" if as_text else "->"
-            accessor = f"data {operator} %s"
-            params = [path_parts[0], ltree_path]
-        else:
-            # Nested path: use #> or #>>
-            operator = "#>>" if as_text else "#>"
-            accessor = f"data {operator} %s::text[]"
-            params = [path_parts, ltree_path]
-        
         type_filter = "AND type = %s" if doc_type else ""
-        if doc_type:
-            params.append(doc_type)
+        
+        # Special case: empty path or "{}" means get entire data field
+        if json_path == "" or json_path == "{}":
+            params = [ltree_path]
+            if doc_type:
+                params.append(doc_type)
+            
+            # Get entire data as JSONB (as_text doesn't apply here)
+            accessor = "data"
+        else:
+            # Convert dot notation to PostgreSQL path operators
+            path_parts = json_path.split('.')
+            
+            # Build the accessor chain and params list
+            # SQL format: SELECT {accessor} FROM table WHERE ltree = %s
+            # Params order: [accessor_params..., ltree_path, doc_type?]
+            if len(path_parts) == 1:
+                # Single key: use -> or ->>
+                operator = "->>" if as_text else "->"
+                accessor = f"data {operator} %s"
+                params = [path_parts[0], ltree_path]
+            else:
+                # Nested path: use #> or #>>
+                operator = "#>>" if as_text else "#>"
+                accessor = f"data {operator} %s::text[]"
+                params = [path_parts, ltree_path]
+            
+            if doc_type:
+                params.append(doc_type)
         
         select_sql = f"""
         SELECT {accessor} as value
@@ -109,6 +218,7 @@ class LTreeJsonDB:
         Args:
             ltree_path: The document ltree path
             json_path: JSON path in format "field" or "field.subfield"
+                      Use "" or "{}" to replace entire data field
             value: Value to set (will be JSON encoded)
             doc_type: Optional document type filter
             create_missing: Create path if it doesn't exist
@@ -116,26 +226,42 @@ class LTreeJsonDB:
         Returns:
             True if successful, False if document not found
         """
-        path_parts = json_path.split('.')
-        
         type_filter = "AND type = %s" if doc_type else ""
-        params = [path_parts, Json(value), ltree_path]
-        if doc_type:
-            params.append(doc_type)
         
-        update_sql = f"""
-        UPDATE {self.table_name}
-        SET data = jsonb_set(
-            data,
-            %s::text[],
-            %s::jsonb,
-            {str(create_missing).lower()}
-        ),
-        updated_at = CURRENT_TIMESTAMP
-        WHERE ltree = %s::ltree
-        {type_filter}
-        RETURNING id;
-        """
+        # Special case: empty path or "{}" means replace entire data field
+        if json_path == "" or json_path == "{}":
+            params = [Json(value), ltree_path]
+            if doc_type:
+                params.append(doc_type)
+            
+            update_sql = f"""
+            UPDATE {self.table_name}
+            SET data = %s::jsonb,
+            updated_at = CURRENT_TIMESTAMP
+            WHERE ltree = %s::ltree
+            {type_filter}
+            RETURNING id;
+            """
+        else:
+            # Normal path: use jsonb_set
+            path_parts = json_path.split('.')
+            params = [path_parts, Json(value), ltree_path]
+            if doc_type:
+                params.append(doc_type)
+            
+            update_sql = f"""
+            UPDATE {self.table_name}
+            SET data = jsonb_set(
+                data,
+                %s::text[],
+                %s::jsonb,
+                {str(create_missing).lower()}
+            ),
+            updated_at = CURRENT_TIMESTAMP
+            WHERE ltree = %s::ltree
+            {type_filter}
+            RETURNING id;
+            """
         
         try:
             with self.conn.cursor() as cur:
@@ -1008,256 +1134,3 @@ class LTreeJsonDB:
             True if successful
         """
         return self.jsonb_set(ltree_path, metadata_path, metadata, doc_type)
-
-
-# ===== Test Suite =====
-
-if __name__ == "__main__":
-    """Comprehensive test suite for LTreeJsonDB."""
-    import os
-    
-    print("=" * 70)
-    print("LTree JSONB Database - Test Suite")
-    print("=" * 70)
-    print()
-    
-    conn = None
-    try:
-        # Setup connection
-        password = os.environ.get('POSTGRES_PASSWORD', '')
-        conn = psycopg2.connect(
-            dbname="knowledge_base",
-            user="gedgar",
-            password=password,
-            host="localhost",
-            port=5432
-        )
-        conn.autocommit = False
-        print("✓ Connected to PostgreSQL")
-        
-        # Create test table and records
-        table_name = "knowledge_base_documents"
-        
-        print("✓ Setting up test environment...")
-        with conn.cursor() as cur:
-            # Enable ltree
-            cur.execute("CREATE EXTENSION IF NOT EXISTS ltree;")
-            
-            # Insert test records
-            cur.execute(f"""
-            INSERT INTO {table_name} (ltree, type, data) VALUES
-            ('root.queues.tasks', 'queue', '{{"items": [], "metadata": {{"name": "Task Queue"}}}}'::jsonb),
-            ('root.queues.messages', 'queue', '{{"items": [], "metadata": {{"name": "Message Queue"}}}}'::jsonb),
-            ('root.queues.priority', 'priority_queue', '{{"items": []}}'::jsonb),
-            ('root.test.operators', 'test', '{{"name": "Test", "role": "admin", "tags": ["python", "postgres"], "address": {{"city": "LA", "zip": "90001"}}}}'::jsonb)
-            ON CONFLICT (ltree) DO UPDATE SET 
-                data = EXCLUDED.data,
-                updated_at = CURRENT_TIMESTAMP;
-            """)
-            
-            conn.commit()
-        
-        print("✓ Test environment ready")
-        print()
-        
-        # Initialize database
-        db = LTreeJsonDB(conn=conn, table_name=table_name)
-        print("✓ JSONB database initialized")
-        print()
-        
-        # Test 1: Basic JSONB Get Operations
-        print("Test 1: Basic JSONB Get Operations (-> and ->>)")
-        print("-" * 70)
-        
-        test_path = "root.test.operators"
-        
-        # Get as JSON
-        name = db.jsonb_get(test_path, "name", as_text=False)
-        print(f"✓ Get name (JSON): {name} (type: {type(name)})")
-        
-        # Get as text
-        name_text = db.jsonb_get(test_path, "name", as_text=True)
-        print(f"✓ Get name (text): {name_text} (type: {type(name_text)})")
-        
-        # Get nested value
-        city = db.jsonb_get(test_path, "address.city", as_text=True)
-        print(f"✓ Get nested city: {city}")
-        print()
-        
-        # Test 2: Key Existence Checks
-        print("Test 2: Key Existence Checks (?, ?|, ?&)")
-        print("-" * 70)
-        
-        has_role = db.jsonb_has_key(test_path, "role")
-        print(f"✓ Has 'role' key: {has_role}")
-        
-        has_any = db.jsonb_has_any_keys(test_path, ["role", "nonexistent"])
-        print(f"✓ Has any of ['role', 'nonexistent']: {has_any}")
-        
-        has_all = db.jsonb_has_all_keys(test_path, ["name", "role"])
-        print(f"✓ Has all of ['name', 'role']: {has_all}")
-        
-        has_all_fail = db.jsonb_has_all_keys(test_path, ["name", "nonexistent"])
-        print(f"✓ Has all of ['name', 'nonexistent']: {has_all_fail}")
-        print()
-        
-        # Test 3: Containment Operators
-        print("Test 3: Containment Operators (@>, <@)")
-        print("-" * 70)
-        
-        contains_admin = db.jsonb_contains(test_path, {"role": "admin"})
-        print(f"✓ Contains {{'role': 'admin'}}: {contains_admin}")
-        
-        contains_wrong = db.jsonb_contains(test_path, {"role": "user"})
-        print(f"✓ Contains {{'role': 'user'}}: {contains_wrong}")
-        
-        contained_by = db.jsonb_contained_by(test_path, {
-            "name": "Test", 
-            "role": "admin",
-            "tags": ["python", "postgres"],
-            "address": {"city": "LA", "zip": "90001"},
-            "extra": "field"
-        })
-        print(f"✓ Is contained by larger object: {contained_by}")
-        print()
-        
-        # Test 4: Array Contains
-        print("Test 4: Array Contains (@>)")
-        print("-" * 70)
-        
-        has_python = db.jsonb_array_contains(test_path, "tags", "python")
-        print(f"✓ Tags contain 'python': {has_python}")
-        
-        has_ruby = db.jsonb_array_contains(test_path, "tags", "ruby")
-        print(f"✓ Tags contain 'ruby': {has_ruby}")
-        print()
-        
-        # Test 5: JSON Path Queries
-        print("Test 5: JSON Path Queries (jsonb_path_*)")
-        print("-" * 70)
-        
-        # Path exists
-        has_admin_role = db.jsonb_path_exists(test_path, '$.role ? (@ == "admin")')
-        print(f"✓ Path exists (role == admin): {has_admin_role}")
-        
-        # Query array elements
-        tags = db.jsonb_path_query(test_path, '$.tags[*]')
-        print(f"✓ Query tags array: {tags}")
-        print()
-        
-        # Test 6: Set and Delete Operations
-        print("Test 6: Set and Delete Operations")
-        print("-" * 70)
-        
-        # Set a value
-        db.jsonb_set(test_path, "status", "active")
-        status = db.jsonb_get(test_path, "status", as_text=True)
-        print(f"✓ Set status: {status}")
-        
-        # Delete a key
-        db.jsonb_delete_key(test_path, "status")
-        status_after = db.jsonb_get(test_path, "status")
-        print(f"✓ Delete status, value after: {status_after}")
-        
-        # Delete nested path
-        db.jsonb_delete_path(test_path, "address.zip")
-        zip_after = db.jsonb_get(test_path, "address.zip")
-        print(f"✓ Delete address.zip, value after: {zip_after}")
-        print()
-        
-        # Test 7: Array Elements Expansion
-        print("Test 7: Array Elements Expansion (jsonb_array_elements)")
-        print("-" * 70)
-        
-        elements = db.jsonb_array_elements(test_path, "tags")
-        print(f"✓ Expanded tag elements: {elements}")
-        print()
-        
-        # Test 8: Basic Queue Operations (FIFO)
-        print("Test 8: Basic Queue Operations (FIFO)")
-        print("-" * 70)
-        
-        queue_path = "root.queues.tasks"
-        
-        db.enqueue(queue_path, {"task": "Task 1", "priority": 1})
-        print("✓ Enqueued Task 1")
-        
-        db.enqueue(queue_path, {"task": "Task 2", "priority": 2})
-        print("✓ Enqueued Task 2")
-        
-        db.enqueue(queue_path, {"task": "Task 3", "priority": 3})
-        print("✓ Enqueued Task 3")
-        
-        size = db.size(queue_path)
-        print(f"✓ Queue size: {size}")
-        
-        item = db.dequeue(queue_path)
-        print(f"✓ Dequeued: {item}")
-        
-        item = db.peek(queue_path)
-        print(f"✓ Peeked (without removing): {item}")
-        
-        size = db.size(queue_path)
-        print(f"✓ Queue size after dequeue: {size}")
-        print()
-        
-        # Test 9: Stack Operations (LIFO)
-        print("Test 9: Stack Operations (LIFO)")
-        print("-" * 70)
-        
-        stack_path = "root.queues.messages"
-        
-        db.push(stack_path, {"message": "First"})
-        print("✓ Pushed 'First'")
-        
-        db.push(stack_path, {"message": "Second"})
-        print("✓ Pushed 'Second'")
-        
-        db.push(stack_path, {"message": "Third"})
-        print("✓ Pushed 'Third'")
-        
-        item = db.pop(stack_path)
-        print(f"✓ Popped (LIFO): {item}")
-        
-        item = db.pop(stack_path)
-        print(f"✓ Popped (LIFO): {item}")
-        
-        size = db.size(stack_path)
-        print(f"✓ Stack size: {size}")
-        print()
-        
-        # Test 10: Edge Cases
-        print("Test 10: Edge Cases")
-        print("-" * 70)
-        
-        # Dequeue from empty queue
-        db.clear(queue_path)
-        item = db.dequeue(queue_path)
-        print(f"✓ Dequeue from empty queue: {item}")
-        
-        # Pop from empty queue
-        item = db.pop(queue_path)
-        print(f"✓ Pop from empty queue: {item}")
-        
-        # Peek at invalid index
-        db.enqueue(queue_path, {"data": "test"})
-        item = db.peek(queue_path, index=10)
-        print(f"✓ Peek at invalid index: {item}")
-        
-        # Peek at negative index
-        item = db.peek(queue_path, index=-1)
-        print(f"✓ Peek at negative index: {item}")
-        print()
-        
-        print("=" * 70)
-        print("All tests completed successfully!")
-        print("=" * 70)
-        
-    except Exception as e:
-        print(f"\n✗ Error: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        if conn:
-            conn.close()
-            print("\n✓ Database connection closed")

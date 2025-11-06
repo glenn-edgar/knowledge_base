@@ -7,11 +7,12 @@ A PostgreSQL table manager using ltree for hierarchical paths and jsonb for docu
 import os
 import json
 import psycopg2
+from psycopg2 import sql
 from psycopg2.extras import Json, RealDictCursor
 from typing import Optional, List, Dict, Any
 
 
-class LTreeDocumentDB_builder:
+class Construct_Jsonb_Table:
     """
     Manages a PostgreSQL table with ltree hierarchical paths and jsonb document storage.
     
@@ -27,7 +28,7 @@ class LTreeDocumentDB_builder:
         updated_at: TIMESTAMP
     """
     
-    def __init__(self, conn, table_name: str = "knowledge_base_documents", upload_flag: bool = False):
+    def __init__(self, conn,cursor, construct_kb, database, upload_flag: bool = False):
         """
         Initialize with an existing PostgreSQL connection.
         
@@ -37,8 +38,10 @@ class LTreeDocumentDB_builder:
             upload_flag: If True, skip table creation
         """
         self.conn = conn
-        self.table_name = table_name
-        
+        self.cursor = cursor
+        self.table_name = database + "_document"
+        self.construct_kb = construct_kb
+        self.database = database
         # Ensure ltree extension is enabled
         self._enable_ltree_extension()
         if upload_flag == False:
@@ -55,7 +58,18 @@ class LTreeDocumentDB_builder:
             raise RuntimeError(f"Failed to enable ltree extension: {e}")
     
     def _create_table(self):
-        """Create the ltree documents table if it doesn't exist."""
+        create_extensions_script = sql.SQL("""
+            CREATE EXTENSION IF NOT EXISTS ltree;
+        """)
+        self.cursor.execute(create_extensions_script)
+        
+        
+        
+        query = sql.SQL("DROP TABLE IF EXISTS {table_name} CASCADE").format(
+            table_name=sql.Identifier(self.table_name)
+        )
+        self.cursor.execute(query)
+        
         create_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {self.table_name} (
             id SERIAL PRIMARY KEY,
@@ -86,6 +100,54 @@ class LTreeDocumentDB_builder:
         except psycopg2.Error as e:
             self.conn.rollback()
             raise RuntimeError(f"Failed to create table: {e}")
+    
+    
+    def add_jsonb_field(self, jsonb_key,type,description,data={}):
+        """
+        Add a new rpc_client field to the knowledge base
+        
+        Args:
+            rpc_client_key (str): The key/name of the rpc_client field
+            description (str): The description of the rpc_client field
+            
+        Raises:
+            TypeError: If rpc_client_key is not a string or initial_properties is not a dictionary
+        """
+        if not isinstance(jsonb_key, str):
+            raise TypeError("jsonb_key must be a string")
+        if not isinstance(type, str):
+            raise TypeError("type must be a string")
+        if not isinstance(description, str):
+            raise TypeError("description must be a string")
+        
+        properties = {"type": type}
+        
+    
+        # Add the node to the knowledge base
+        self.construct_kb.add_info_node("KB_JSONB_FIELD", jsonb_key, properties, data,description)
+        
+    
+        
+        return {
+            "jsonb": "success",
+            "message": f"jsonb field '{jsonb_key}' added successfully",
+            "properties": properties,
+            "data": data
+        }
+      
+        
+        # Convert dictionaries to JSON strings
+        
+        
+        # Add the node to the knowledge base
+        self.construct_kb.add_info_node("KB_JSONB_FIELD", jsonb_key, {},{},description)
+        
+        
+        return {
+            "jsonb": "success",
+            "message": f"jsonb field '{jsonb_key}' added successfully",
+            "data": description
+        }
     
     def add_record(self, 
                    ltree_path: str, 
@@ -161,6 +223,9 @@ class LTreeDocumentDB_builder:
         except psycopg2.Error as e:
             raise RuntimeError(f"Failed to list ltree ids: {e}")
     
+   
+        
+        
     def get_record(self, record_id: int) -> Optional[Dict[str, Any]]:
         """
         Get a record by its id.
@@ -186,6 +251,7 @@ class LTreeDocumentDB_builder:
                 return dict(result) if result else None
         except psycopg2.Error as e:
             raise RuntimeError(f"Failed to get record: {e}")
+        
     
     def query_by_ltree(self, ltree_pattern: str) -> List[Dict[str, Any]]:
         """
@@ -222,8 +288,8 @@ class LTreeDocumentDB_builder:
     
     def sync_ltree_paths(self, 
                      target_paths: List[str],
-                     default_type: Optional[str] = None,
-                     default_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                     default_type: Dict[str, str] = None,
+                     default_data: Optional[Dict[str, Any]] = {}) -> Dict[str, Any]:
         """
         Synchronize table records with a target list of ltree paths.
         Adds missing paths and deletes paths not in the target list.
@@ -237,6 +303,8 @@ class LTreeDocumentDB_builder:
             Dictionary with 'added' and 'deleted' lists containing affected record info
         """
         # Get current ltree paths from the table
+        
+        
         current_records = self.list_ltree_ids()
         current_paths = {record['ltree'] for record in current_records}
         target_paths_set = set(target_paths)
@@ -251,14 +319,15 @@ class LTreeDocumentDB_builder:
         try:
             # Add missing paths
             for path in sorted(paths_to_add):
+                type = default_type[path]
                 record_id = self.add_record(
                     ltree_path=path,
-                    doc_type=default_type,
+                    doc_type=type,
                     data=default_data
                 )
                 added_records.append({'id': record_id, 'ltree': path})
             
-            # Delete extra paths
+            
             # Create a map of ltree path to id for efficient lookup
             path_to_id = {record['ltree']: record['id'] for record in current_records}
             
@@ -281,151 +350,31 @@ class LTreeDocumentDB_builder:
             self.conn.rollback()
             raise RuntimeError(f"Failed to sync ltree paths: {e}")
 
-
-if __name__ == "__main__":
-    """Test the LTreeDocumentDB class."""
+    def check_installation(self):     
+        
+        try:
+            query = sql.SQL("""
+            SELECT path, properties FROM {table_name} 
+            WHERE label = 'KB_JSONB_FIELD';
+            """).format(table_name=sql.Identifier(self.database))
+            
+            self.cursor.execute(query)
+            specified_paths_data = self.cursor.fetchall()
+            
+            paths = []
+            types = {}
+            
+            
+            for row in specified_paths_data:
+                paths.append(row[0])
+                properties = row[1]
+            
+                types[row[0]] = properties['type']
+            # Create a dictionary with path as key and other fields as a nested dictionary
+            
+        except Exception as e:
+            raise Exception(f"Error retrieving knowledge base fields: {str(e)}")
+        
+        
+        self.sync_ltree_paths(paths, types)
     
-    print("=" * 60)
-    print("Testing LTreeDocumentDB_builder")
-    print("=" * 60)
-    
-    # Setup PostgreSQL connection
-    conn = None
-    try:
-        # Get password from environment
-        password = os.environ.get('POSTGRES_PASSWORD', '')
-        
-        # Create connection
-        conn = psycopg2.connect(
-            dbname="knowledge_base",
-            user="gedgar",
-            password=password,
-            host="localhost",
-            port=5432
-        )
-        conn.autocommit = False
-        print("✓ Connected to PostgreSQL")
-        
-        # Create database instance with the connection
-        db = LTreeDocumentDB_builder(conn=conn)
-        print(f"✓ Table 'knowledge_base_documents' ready")
-        print()
-        
-        # Test 1: Add records
-        print("Test 1: Adding records")
-        print("-" * 60)
-        
-        id1 = db.add_record(
-            ltree_path="root.system.config",
-            doc_type="configuration",
-            data={
-                "name": "System Configuration",
-                "version": "1.0",
-                "settings": {"timeout": 30, "retries": 3}
-            }
-        )
-        print(f"✓ Added record with id={id1}, path='root.system.config'")
-        
-        id2 = db.add_record(
-            ltree_path="root.system.logs",
-            doc_type="log_config",
-            data={
-                "name": "Log Settings",
-                "level": "INFO",
-                "destinations": ["file", "console"]
-            }
-        )
-        print(f"✓ Added record with id={id2}, path='root.system.logs'")
-        
-        id3 = db.add_record(
-            ltree_path="root.sensors.temperature",
-            doc_type="sensor_data",
-            data={
-                "sensor_id": "temp001",
-                "location": "room_a",
-                "value": 22.5,
-                "unit": "celsius"
-            }
-        )
-        print(f"✓ Added record with id={id3}, path='root.sensors.temperature'")
-        
-        id4 = db.add_record(
-            ltree_path="root.sensors.humidity",
-            doc_type="sensor_data",
-            data={
-                "sensor_id": "hum001",
-                "location": "room_a",
-                "value": 45.2,
-                "unit": "percent"
-            }
-        )
-        print(f"✓ Added record with id={id4}, path='root.sensors.humidity'")
-        print()
-        
-        # Test 2: List ltree ids
-        print("Test 2: Listing all ltree paths and ids")
-        print("-" * 60)
-        records = db.list_ltree_ids()
-        for record in records:
-            print(f"  id={record['id']:2d}  ltree='{record['ltree']:30s}'  type='{record['type']}'")
-        print()
-        
-        # Test 3: Get specific record
-        print("Test 3: Retrieving specific record")
-        print("-" * 60)
-        record = db.get_record(id1)
-        if record:
-            print(f"Record id={record['id']}:")
-            print(f"  Path: {record['ltree']}")
-            print(f"  Type: {record['type']}")
-            print(f"  Data: {json.dumps(record['data'], indent=2)}")
-            print(f"  Locked by: {record['locked_by']}")
-        print()
-        
-        # Test 4: Query by ltree pattern
-        print("Test 4: Query by ltree pattern (root.sensors.*)")
-        print("-" * 60)
-        sensor_records = db.query_by_ltree("root.sensors.*")
-        print(f"Found {len(sensor_records)} sensor records:")
-        for record in sensor_records:
-            print(f"  id={record['id']}  {record['ltree']}  -> {record['data'].get('sensor_id')}")
-        print()
-        
-        # Test 5: Delete a record
-        print("Test 5: Deleting record")
-        print("-" * 60)
-        deleted = db.delete_record(id2)
-        if deleted:
-            print(f"✓ Deleted record with id={id2}")
-        else:
-            print(f"✗ No record found with id={id2}")
-        print()
-        
-        # Test 6: List after deletion
-        print("Test 6: Listing after deletion")
-        print("-" * 60)
-        records = db.list_ltree_ids()
-        print(f"Total records: {len(records)}")
-        for record in records:
-            print(f"  id={record['id']:2d}  ltree='{record['ltree']:30s}'  type='{record['type']}'")
-        print()
-        
-        print("Cleanup: Deleting remaining test records...")
-        for record in records:
-            db.delete_record(record['id'])
-        print("✓ Cleanup complete")
-        print()
-        
-        print("=" * 60)
-        print("All tests completed successfully!")
-        print("=" * 60)
-        
-    except Exception as e:
-        print(f"✗ Error: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        # Close the connection
-        if conn:
-            conn.close()
-            print("✓ Database connection closed")

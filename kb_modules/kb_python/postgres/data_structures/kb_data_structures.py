@@ -14,6 +14,7 @@ from .kb_link_table import KB_Link_Table
 from .kb_link_mount_table import KB_Link_Mount_Table
 from .kb_bit_structures import KB_Bit_Structures
 from .bit_s_expression import KB_BIT_DATA
+from .kb_document_table import KB_Document_Table
 
 class KB_Data_Structures:
     """
@@ -125,6 +126,39 @@ class KB_Data_Structures:
         self.s_execute = self.bit_structures.execute
         self.set_all_ones = self.bit_structures.set_all_ones
         self.set_all_zeros = self.bit_structures.set_all_zeros
+        
+        self.document_table = KB_Document_Table(self.query_support.conn, self.query_support, database)
+        self.find_document_id = self.document_table.find_document_id
+        self.find_document_ids = self.document_table.find_document_ids
+        self.find_document_paths = self.document_table.find_document_paths
+        self.jsonb_get = self.document_table.jsonb_get
+        self.jsonb_set = self.document_table.jsonb_set
+        self.jsonb_delete_key = self.document_table.jsonb_delete_key
+        self.jsonb_delete_path = self.document_table.jsonb_delete_path
+        self.jsonb_has_key = self.document_table.jsonb_has_key
+        self.jsonb_has_any_keys = self.document_table.jsonb_has_any_keys
+        self.jsonb_has_all_keys = self.document_table.jsonb_has_all_keys
+        self.jsonb_contains = self.document_table.jsonb_contains
+        self.jsonb_contained_by = self.document_table.jsonb_contained_by
+        self.jsonb_path_exists = self.document_table.jsonb_path_exists
+        self.jsonb_path_query = self.document_table.jsonb_path_query
+        self.jsonb_query = self.document_table.jsonb_query
+        self.jsonb_array_append = self.document_table.jsonb_array_append
+        self.jsonb_array_prepend = self.document_table.jsonb_array_prepend
+        self.jsonb_array_remove_index = self.document_table.jsonb_array_remove_index
+        self.jsonb_array_contains = self.document_table.jsonb_array_contains
+        self.jsonb_array_elements = self.document_table.jsonb_array_elements
+        self.jsonb_enqueue = self.document_table.enqueue
+        self.jsonb_dequeue = self.document_table.dequeue
+        self.jsonb_peek = self.document_table.peek
+        self.jsonb_size = self.document_table.size
+        self.jsonb_is_empty = self.document_table.is_empty
+        self.jsonb_clear = self.document_table.clear
+        self.jsonb_get_all = self.document_table.get_all
+        self.jsonb_push = self.document_table.push
+        self.jsonb_pop = self.document_table.pop
+        self.jsonb_get_metadata = self.document_table.get_metadata
+        self.jsonb_set_metadata = self.document_table.set_metadata
 
 # Example usage:
 if __name__ == "__main__":
@@ -408,8 +442,192 @@ if __name__ == "__main__":
             
         
     test_bit_structures(kb_data_structures)
+    
+    def test_document_table(self,label_field):
+        print("***************************  Document Table ***************************")
+        node_ids = self.find_document_ids(None, label_field, None, None)
+        node_id = node_ids[0]['path']
+        value={
+            "name": "Test",
+            "role": "admin",
+            "tags": ["python", "postgres"],
+            "address": {"city": "LA", "zip": "90001"}
+        }
+        self.jsonb_set(node_id, "{}", value)
+        print(self.jsonb_get(node_id, "{}"))
+        name = self.jsonb_get(node_id, "name", as_text=False)
+        print(f"✓ Get name (JSON): {name} (type: {type(name)})")
+        name_text = self.jsonb_get(node_id, "name", as_text=True)
+        print(f"✓ Get name (text): {name_text} (type: {type(name_text)})")
+        city = self.jsonb_get(node_id, "address.city", as_text=True)
+        print(f"✓ Get nested city: {city}")
+        print()
+        has_role = self.jsonb_has_key(node_id, "role")
+        print(f"✓ Has 'role' key: {has_role}")
+        has_any = self.jsonb_has_any_keys(node_id, ["role", "nonexistent"])
+        print(f"✓ Has any of ['role', 'nonexistent']: {has_any}")
+        has_all = self.jsonb_has_all_keys(node_id, ["name", "role"])
+        print(f"✓ Has all of ['name', 'role']: {has_all}")
+        has_all_fail = self.jsonb_has_all_keys(node_id, ["name", "nonexistent"])
+        print(f"✓ Has all of ['name', 'nonexistent']: {has_all_fail}")
+        print()
+        # Test 3: Containment Operators
+        print("Test 3: Containment Operators (@>, <@)")
+        print("-" * 70)
+        
+        contains_admin = self.jsonb_contains(node_id, {"role": "admin"})
+        print(f"✓ Contains {{'role': 'admin'}}: {contains_admin}")
+        
+        contains_wrong = self.jsonb_contains(node_id, {"role": "user"})
+        print(f"✓ Contains {{'role': 'user'}}: {contains_wrong}")
+        
+        contained_by = self.jsonb_contained_by(node_id, {
+            "name": "Test", 
+            "role": "admin",
+            "tags": ["python", "postgres"],
+            "address": {"city": "LA", "zip": "90001"},
+            "extra": "field"
+        })
+        print(f"✓ Is contained by larger object: {contained_by}")
+        print()
+        
+        # Test 4: Array Contains
+        print("Test 4: Array Contains (@>)")
+        print("-" * 70)
+        
+        has_python = self.jsonb_array_contains(node_id, "tags", "python")
+        print(f"✓ Tags contain 'python': {has_python}")
+        
+        has_ruby = self.jsonb_array_contains(node_id, "tags", "ruby")
+        print(f"✓ Tags contain 'ruby': {has_ruby}")
+        print()
+        
+        # Test 5: JSON Path Queries
+        print("Test 5: JSON Path Queries (jsonb_path_*)")
+        print("-" * 70)
+        
+        # Path exists
+        has_admin_role = self.jsonb_path_exists(node_id, '$.role ? (@ == "admin")')
+        print(f"✓ Path exists (role == admin): {has_admin_role}")
+        
+        # Query array elements
+        tags = self.jsonb_path_query(node_id, '$.tags[*]')
+        print(f"✓ Query tags array: {tags}")
+        print()
+        
+        # Test 6: Set and Delete Operations
+        print("Test 6: Set and Delete Operations")
+        print("-" * 70)
+        
+        # Set a value
+        self.jsonb_set(node_id, "status", "active")
+        status = self.jsonb_get(node_id, "status", as_text=True)
+        print(f"✓ Set status: {status}")
+        
+        # Delete a key
+        self.jsonb_delete_key(node_id, "status")
+        status_after = self.jsonb_get(node_id, "status")
+        print(f"✓ Delete status, value after: {status_after}")
+        
+        # Delete nested path
+        self.jsonb_delete_path(node_id, "address.zip")
+        zip_after = self.jsonb_get(node_id, "address.zip")
+        print(f"✓ Delete address.zip, value after: {zip_after}")
+        print()
+        
+        # Test 7: Array Elements Expansion
+        print("Test 7: Array Elements Expansion (jsonb_array_elements)")
+        print("-" * 70)
+        
+        elements = self.jsonb_array_elements(node_id, "tags")
+        print(f"✓ Expanded tag elements: {elements}")
+        print()
+        
+        # Test 8: Basic Queue Operations (FIFO)
+        print("Test 8: Basic Queue Operations (FIFO)")
+        print("-" * 70)
+        
+        self.jsonb_enqueue(node_id, {"task": "Task 1", "priority": 1})
+        print("✓ Enqueued Task 1")
+        
+        self.jsonb_enqueue(node_id, {"task": "Task 2", "priority": 2})
+        print("✓ Enqueued Task 2")
+        
+        self.jsonb_enqueue(node_id, {"task": "Task 3", "priority": 3})
+        print("✓ Enqueued Task 3")
+        
+        size = self.jsonb_size(node_id)
+        print(f"✓ Queue size: {size}")
+        
+        item = self.jsonb_dequeue(node_id)
+        print(f"✓ Dequeued: {item}")
+        
+        item = self.jsonb_peek(node_id)
+        print(f"✓ Peeked (without removing): {item}")
+        
+        size = self.jsonb_size(node_id)
+        print(f"✓ Queue size after dequeue: {size}")
+        print()
+        
+        # Test 9: Stack Operations (LIFO)
+        print("Test 9: Stack Operations (LIFO)")
+        print("-" * 70)
+        
+        stack_path = "root.queues.messages"
+        
+        self.jsonb_push(node_id, {"message": "First"})
+        print("✓ Pushed 'First'")
+        
+        self.jsonb_push(node_id, {"message": "Second"})
+        print("✓ Pushed 'Second'")
+        
+        self.jsonb_push(node_id, {"message": "Third"})
+        print("✓ Pushed 'Third'")
+        
+        item = self.jsonb_pop(node_id)
+        print(f"✓ Popped (LIFO): {item}")
+        
+        item = self.jsonb_pop(node_id)
+        print(f"✓ Popped (LIFO): {item}")
+        
+        size =self.jsonb_size(node_id)
+        print(f"✓ Stack size: {size}")
+        print()
+        
+        # Test 10: Edge Cases
+        print("Test 10: Edge Cases")
+        print("-" * 70)
+        
+        # Dequeue from empty queue
+        self.jsonb_clear(node_id)
+        item = self.jsonb_dequeue(node_id)
+        print(f"✓ Dequeue from empty queue: {item}")
+        
+        # Pop from empty queue
+        item = self.jsonb_pop(node_id)
+        print(f"✓ Pop from empty queue: {item}")
+        
+        # Peek at invalid index
+        self.jsonb_enqueue(node_id, {"data": "test"})
+        item = self.jsonb_peek(node_id, index=10)
+        print(f"✓ Peek at invalid index: {item}")
+        
+        # Peek at negative index
+        item = self.jsonb_peek(node_id, index=-1)
+        print(f"✓ Peek at negative index: {item}")
+        print()
+        
+        print("=" * 70)
+        print("All tests completed successfully!")
+        print("=" * 70)
+        
+        print("***************************  Document Table test complete ***************************")
+        
 
-
+    test_document_table(kb_data_structures,"info1_jsonb")
+    test_document_table(kb_data_structures,"info2_jsonb")
+    test_document_table(kb_data_structures,"info3_jsonb")
+    
     """
     Status Data  
     This test demonstrates the use of the status data functions.

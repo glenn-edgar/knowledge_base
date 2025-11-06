@@ -12,6 +12,7 @@ from .construct_stream_table import Construct_Stream_Table
 from .construct_rpc_client_table import Construct_RPC_Client_Table
 from .construct_rpc_server_table import Construct_RPC_Server_Table
 from .construct_bit_mask_store import Construct_Bit_Mask_Store
+from .construct_jsonb_table import Construct_Jsonb_Table
 
 class Construct_Data_Tables:
     """
@@ -45,6 +46,8 @@ class Construct_Data_Tables:
         self.rpc_client_table = Construct_RPC_Client_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,upload_flag=upload_flag)
         self.rpc_server_table = Construct_RPC_Server_Table(self.kb.conn, self.kb.cursor, self.kb,database=database,upload_flag=upload_flag)
         self.bit_mask_store = Construct_Bit_Mask_Store(self.kb.conn, self.kb,upload_flag=upload_flag)
+        self.jsonb_table = Construct_Jsonb_Table(self.kb.conn,self.kb.cursor, self.kb, database=database,upload_flag=upload_flag)
+        
         self.path = self.kb.path
         self.add_kb = self.kb.add_kb
         self.select_kb = self.kb.select_kb
@@ -62,6 +65,7 @@ class Construct_Data_Tables:
         self.create_bit_mask_entry = self.bit_mask_store.create_bit_mask_entry
         self.add_bit_mask_flag = self.bit_mask_store.add_flag
         self.clear_bit_mask_flags = self.bit_mask_store.clear_flags
+        self.add_jsonb_field = self.jsonb_table.add_jsonb_field
         
         
         
@@ -79,6 +83,8 @@ class Construct_Data_Tables:
       
         self.rpc_client_table.check_installation()
         self.rpc_server_table.check_installation()
+        self.jsonb_table.check_installation()
+        
         
 if __name__ == '__main__':
     unit_test = False
@@ -131,6 +137,9 @@ if __name__ == '__main__':
         kb.add_job_field("info1_job", 100, "info1_job_description")
         kb.add_stream_field("info1_stream",95, "info1_stream")
         kb.add_rpc_client_field("info1_client", 10,"info1_client_description") 
+        kb.add_jsonb_field("info1_jsonb", "type_1", "info1_jsonb_description", {"data":"info1_jsonb_data"})
+        kb.add_jsonb_field("info2_jsonb", "type_1", "info2_jsonb_description", {"data":"info2_jsonb_data"})
+        kb.add_jsonb_field("info3_jsonb", "type_2", "info3_jsonb_description", {"data":"info3_jsonb_data"})
         kb.add_link_mount("info1_link_mount", "info1_link_mount_description")  
         
         
@@ -193,6 +202,7 @@ if __name__ == '__main__':
     kb.add_job_field("info2_job", 100, "info1_job_description")
     kb.add_stream_field("info2_status",100, "info1_stream")
     kb.add_rpc_client_field("info2_client", 10,"info1_client_description")   
+    
     kb.leave_header_node("header1_link", "header1_name")
     print("\nAfter leave_header_node:")
     print(f"Path: {kb.path}")
